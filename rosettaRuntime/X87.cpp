@@ -2,8 +2,8 @@
 
 #include "Export.h"
 #include "Log.h"
-#include "X87State.h"
 #include "SIMDGuard.h"
+#include "X87State.h"
 
 #include "openlibm_math.h"
 
@@ -601,9 +601,35 @@ void x87_fiadd(X87State *a1, int m32int) {
 #endif
 }
 
-void x87_ficom(X87State *a1, int a2, bool a3) {
-  MISSING(1, "x87_ficom\n", 11);
-  orig_x87_ficom(a1, a2, a3);
+void x87_ficom(X87State *a1, int src, bool pop) {
+  SIMDGuard simd_guard;
+  LOG(1, "x87_ficom\n", 11);
+#if defined(X87_FICOM)
+  auto st0 = a1->get_st(0);
+
+  // Clear condition code bits C0, C2, C3 (bits 8, 9, 14)
+  a1->status_word &=
+      ~(kConditionCode0 | kConditionCode1 | kConditionCode2 | kConditionCode3);
+
+  // Set condition codes based on comparison
+  if (isnan(st0) || isnan(src)) {
+    a1->status_word |=
+        kConditionCode0 | kConditionCode2 | kConditionCode3; // Set C0=C2=C3=1
+  } else if (st0 > src) {
+    // Leave C0=C2=C3=0
+  } else if (st0 < src) {
+    a1->status_word |= kConditionCode0; // Set C0=1
+  } else {                              // st0 == src
+    a1->status_word |= kConditionCode3; // Set C3=1
+  }
+
+  // Handle pops if requested
+  if (pop) {
+    a1->pop();
+  }
+#else
+  orig_x87_ficom(a1, src, pop);
+#endif
 }
 
 void x87_fidiv(X87State *a1, int a2) {
@@ -1641,9 +1667,36 @@ void x87_fsubr_f64(X87State *a1, unsigned long long a2) {
 #endif
 }
 
-void x87_fucom(X87State *a1, unsigned int a2, unsigned int a3) {
-  MISSING(1, "x87_fucom\n", 11);
-  orig_x87_fucom(a1, a2, a3);
+void x87_fucom(X87State *a1, unsigned int src, unsigned int pop) {
+  SIMDGuard simd_guard;
+
+  LOG(1, "x87_fucom\n", 11);
+#if defined(X87_FUCOM)
+  auto st0 = a1->get_st(0);
+
+  // Clear condition code bits C0, C2, C3 (bits 8, 9, 14)
+  a1->status_word &=
+      ~(kConditionCode0 | kConditionCode1 | kConditionCode2 | kConditionCode3);
+
+  // Set condition codes based on comparison
+  if (isnan(st0) || isnan(src)) {
+    a1->status_word |=
+        kConditionCode0 | kConditionCode2 | kConditionCode3; // Set C0=C2=C3=1
+  } else if (st0 > src) {
+    // Leave C0=C2=C3=0
+  } else if (st0 < src) {
+    a1->status_word |= kConditionCode0; // Set C0=1
+  } else {                              // st0 == src
+    a1->status_word |= kConditionCode3; // Set C3=1
+  }
+
+  // Handle pops if requested
+  if (pop) {
+    a1->pop();
+  }
+#else
+  orig_x87_fucom(a1, src, pop);
+#endif
 }
 // Compare ST(0) with ST(i), check for ordered values, set status flags
 // accordingly, and pop register stack.
