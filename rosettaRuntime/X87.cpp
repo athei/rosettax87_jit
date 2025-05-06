@@ -1307,7 +1307,25 @@ void x87_frndint(X87State *a1) {
 
   // Get current value and round it
   double value = a1->get_st(0);
-  double rounded = nearbyint(value);
+  double rounded;
+  auto round_bits = a1->control_word & X87ControlWord::kRoundingControlMask;
+
+  switch (round_bits) {
+  case X87ControlWord::kRoundToNearest: {
+    rounded = std::nearbyint(value);
+  } break;
+
+  case X87ControlWord::kRoundDown: {
+    rounded = std::floor(value);
+  } break;
+  case X87ControlWord::kRoundUp: {
+    rounded = std::ceil(value);
+  } break;
+
+  case X87ControlWord::kRoundToZero: {
+    rounded = std::trunc(value);
+  } break;
+  }
 
   // Store rounded value and update tag
   a1->set_st(0, rounded);
