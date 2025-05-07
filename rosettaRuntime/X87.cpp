@@ -1685,16 +1685,16 @@ void x87_fsubr_f64(X87State *a1, unsigned long long a2) {
 #endif
 }
 
-void x87_fucom(X87State *a1, unsigned int src, unsigned int pop) {
+void x87_fucom(X87State *a1, unsigned int st_offset, unsigned int pop) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fucom\n", 11);
 #if defined(X87_FUCOM)
   auto st0 = a1->get_st(0);
+  auto src = a1->get_st(st_offset);
 
   // Clear condition code bits C0, C2, C3 (bits 8, 9, 14)
-  a1->status_word &=
-      ~(kConditionCode0 | kConditionCode1 | kConditionCode2 | kConditionCode3);
+  a1->status_word &= ~(kConditionCode0 | kConditionCode2 | kConditionCode3);
 
   // Set condition codes based on comparison
   if (isnan(st0) || isnan(src)) {
@@ -1709,7 +1709,7 @@ void x87_fucom(X87State *a1, unsigned int src, unsigned int pop) {
   }
 
   // Handle pops if requested
-  if (pop) {
+  for (auto i = 0; i < pop; ++i) {
     a1->pop();
   }
 #else
