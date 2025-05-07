@@ -1161,9 +1161,20 @@ int main(int argc, char* argv[]) {
 
   printf("Rosetta version: %llx\n", exports.version);
 
+  char path[PATH_MAX];
+  uint32_t size = sizeof(path);
+  if (_NSGetExecutablePath(path, &size) != 0) {
+    printf("Failed to get executable path\n");
+    return 1;
+  }
+
+  // get the directory of the current executable
+  std::filesystem::path executable_path(path);
+  std::filesystem::path executable_dir = executable_path.parent_path();
+
   MachoLoader macho_loader;
 
-  if (!macho_loader.open(std::filesystem::current_path() / "libRuntimeRosettax87")) {
+  if (!macho_loader.open(executable_dir / "libRuntimeRosettax87")) {
     printf("Failed to open Mach-O file\n");
     return 1;
   }
