@@ -100,9 +100,9 @@ void *init_library(SymbolList const *a1, unsigned long long a2,
   SIMDGuardFull simd_guard;
   exports_init();
 
-  // simple_printf("RosettaRuntimex87 built %s"
-  //               "\n",
-  //               __DATE__ " " __TIME__);
+  simple_printf("RosettaRuntimex87 built %s"
+                "\n",
+                __DATE__ " " __TIME__);
 
   return orig_init_library(a1, a2, a3);
 }
