@@ -87,73 +87,69 @@
                  "br " #REGISTER);                                             \
   }
 
+#define X87_TRAMPOLINE_ARGS(RETURN, NAME, ARGS, REGISTER)                      \
+  RETURN __attribute__((naked, used)) NAME ARGS {                              \
+    asm volatile("adrp " #REGISTER ", _orig_" #NAME "@PAGE\n"                  \
+                 "ldr " #REGISTER ", [" #REGISTER ", _orig_" #NAME             \
+                 "@PAGEOFF]\n"                                                 \
+                 "br " #REGISTER);                                             \
+  }
+
 void *init_library(SymbolList const *a1, unsigned long long a2,
                    ThreadContextOffsets const *a3) {
+  SIMDGuardFull simd_guard;
   exports_init();
 
-  simple_printf("RosettaRuntimex87 built %s"
-                "\n",
-                __DATE__ " " __TIME__);
+  // simple_printf("RosettaRuntimex87 built %s"
+  //               "\n",
+  //               __DATE__ " " __TIME__);
 
   return orig_init_library(a1, a2, a3);
 }
 
-X87_TRAMPOLINE(register_runtime_routine_offsets, x8)
-X87_TRAMPOLINE(translator_use_t8027_codegen, x8)
-X87_TRAMPOLINE(translator_reset, x8)
-X87_TRAMPOLINE(ir_create_bad_access, x8)
-X87_TRAMPOLINE(ir_create, x8)
-X87_TRAMPOLINE(module_free, x8)
-X87_TRAMPOLINE(module_get_size, x8)
-X87_TRAMPOLINE(module_is_bad_access, x8)
-X87_TRAMPOLINE(module_print, x8)
-X87_TRAMPOLINE(translator_translate, x8)
-X87_TRAMPOLINE(translator_free, x8)
-X87_TRAMPOLINE(translator_get_data, x8)
-X87_TRAMPOLINE(translator_get_size, x8)
-X87_TRAMPOLINE(translator_get_branch_slots_offset, x8)
-X87_TRAMPOLINE(translator_get_branch_slots_count, x8)
-X87_TRAMPOLINE(translator_get_branch_entries, x2)
-X87_TRAMPOLINE(translator_get_instruction_offsets, x2)
-X87_TRAMPOLINE(translator_apply_fixups, x8)
+X87_TRAMPOLINE(register_runtime_routine_offsets, x9)
+X87_TRAMPOLINE(translator_use_t8027_codegen, x9)
+X87_TRAMPOLINE(translator_reset, x9)
+X87_TRAMPOLINE(ir_create_bad_access, x9)
+X87_TRAMPOLINE(ir_create, x9)
+X87_TRAMPOLINE(module_free, x9)
+X87_TRAMPOLINE(module_get_size, x9)
+X87_TRAMPOLINE(module_is_bad_access, x9)
+X87_TRAMPOLINE(module_print, x9)
+X87_TRAMPOLINE(translator_translate, x9)
+X87_TRAMPOLINE(translator_free, x9)
+X87_TRAMPOLINE(translator_get_data, x9)
+X87_TRAMPOLINE(translator_get_size, x9)
+X87_TRAMPOLINE(translator_get_branch_slots_offset, x9)
+X87_TRAMPOLINE(translator_get_branch_slots_count, x9)
+X87_TRAMPOLINE(translator_get_branch_entries, x9)
+X87_TRAMPOLINE(translator_get_instruction_offsets, x9)
+X87_TRAMPOLINE(translator_apply_fixups, x9)
 
+#if !defined(X87_CONVERT_TO_FP80)
 void x87_init(X87State *a1) {
-  SIMDGuard simd_guard;
-
+  SIMDGuardFull simd_guard;
   LOG(1, "x87_init\n", 9);
-
-#if defined(X87_CONVERT_TO_FP80)
-  orig_x87_init(a1);
-#else
   *a1 = X87State();
-#endif
 }
-// void x87_state_from_x86_float_state(X87State *a1, X86FloatState64 const *a2) {
-//   MISSING(1, "x87_state_from_x86_float_state\n", 31);
-//   orig_x87_state_from_x86_float_state(a1, a2);
-// }
-// void x87_state_to_x86_float_state(X87State const *a1, X86FloatState64 *a2) {
-//   MISSING(1, "x87_state_to_x86_float_state\n", 29);
-//   orig_x87_state_to_x86_float_state(a1, a2);
-// }
-// void x87_pop_register_stack(X87State *a1) {
-//   MISSING(1, "x87_pop_register_stack\n", 23);
-//   orig_x87_pop_register_stack(a1);
-// }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_init, (X87State * a1), x9);
+#endif
 
 X87_TRAMPOLINE(x87_state_from_x86_float_state, x9);
 X87_TRAMPOLINE(x87_state_to_x86_float_state, x9);
 X87_TRAMPOLINE(x87_pop_register_stack, x9);
+
 // Computes the exponential value of 2 to the power of the source operand
 // minus 1. The source operand is located in register ST(0) and the result is
 // also stored in ST(0). The value of the source operand must lie in the range
 // –1.0 to +1.0. If the source value is outside this range, the result is
 // undefined.
+#if defined(X87_F2XM1)
 void x87_f2xm1(X87State *state) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_f2xm1\n", 10);
-#if defined(X87_F2XM1)
   // Get value from ST(0)
   auto x = state->get_st(0);
 
@@ -169,20 +165,20 @@ void x87_f2xm1(X87State *state) {
 
   // Store result back in ST(0)
   state->set_st(0, result);
-#else
-  orig_x87_f2xm1(state);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_f2xm1, (X87State * state), x9);
+#endif
 
 // Clears the sign bit of ST(0) to create the absolute value of the operand. The
 // following table shows the results obtained when creating the absolute value
 // of various classes of numbers. C1 	Set to 0.
+#if defined(X87_FABS)
 void x87_fabs(X87State *a1) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fabs\n", 10);
 
-#if defined(X87_FABS)
   // Clear condition code 1 and exception flags
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
@@ -191,17 +187,17 @@ void x87_fabs(X87State *a1) {
 
   // Set value in ST(0) to its absolute value
   a1->set_st(0, value < 0 ? -value : value);
-#else
-  orig_x87_fabs(a1);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fabs, (X87State * a1), x9);
+#endif
 
+#if defined(X87_FADD_ST)
 void x87_fadd_ST(X87State *a1, unsigned int st_offset_1,
                  unsigned int st_offset_2, bool pop_stack) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fadd_ST\n", 13);
-#if defined(X87_FADD_ST)
   // Clear condition code 1 and exception flags
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
@@ -215,16 +211,19 @@ void x87_fadd_ST(X87State *a1, unsigned int st_offset_1,
   if (pop_stack) {
     a1->pop();
   }
-#else
-  orig_x87_fadd_ST(a1, st_offset_1, st_offset_2, pop_stack);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fadd_ST,
+                    (X87State * a1, unsigned int st_offset_1,
+                     unsigned int st_offset_2, bool pop_stack),
+                    x9);
+#endif
 
+#if defined(X87_FADD_F32)
 void x87_fadd_f32(X87State *a1, unsigned int fp32) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fadd_f32\n", 14);
-#if defined(X87_FADD_F32)
 
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
@@ -232,15 +231,16 @@ void x87_fadd_f32(X87State *a1, unsigned int fp32) {
   auto st0 = a1->get_st(0);
 
   a1->set_st(0, st0 + value);
-#else
-  orig_x87_fadd_f32(a1, fp32);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fadd_f32, (X87State * a1, unsigned int fp32), x9);
+#endif
+
+#if defined(X87_FADD_F64)
 void x87_fadd_f64(X87State *a1, unsigned long long a2) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fadd_f64\n", 14);
-#if defined(X87_FADD_F64)
 
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
@@ -248,10 +248,11 @@ void x87_fadd_f64(X87State *a1, unsigned long long a2) {
   auto st0 = a1->get_st(0);
 
   a1->set_st(0, st0 + value);
-#else
-  orig_x87_fadd_f64(a1, a2);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fadd_f64, (X87State * a1, unsigned long long a2),
+                    x9);
+#endif
 
 double BCD2Double(uint8_t bcd[10]) {
   uint64_t tmp = 0;
@@ -278,11 +279,11 @@ double BCD2Double(uint8_t bcd[10]) {
   return value;
 }
 
+#if defined(X87_FBLD)
 void x87_fbld(X87State *a1, unsigned long long a2, unsigned long long a3) {
   SIMDGuard simd_guard;
   LOG(1, "x87_fbld\n", 10);
 
-#if defined(X87_FBLD)
   // set C1 to 0
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
@@ -295,37 +296,42 @@ void x87_fbld(X87State *a1, unsigned long long a2, unsigned long long a3) {
   // Add space on the stack and push the converted BCD
   a1->push();
   a1->set_st(0, value);
-#else
-  orig_x87_fbld(a1, a2, a3);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fbld,
+                    (X87State * a1, unsigned long long a2,
+                     unsigned long long a3),
+                    x9);
+// orig_x87_fbld(a1, a2, a3);
+#endif
 
 void x87_fbstp(X87State const *a1) {
   MISSING(1, "x87_fbstp\n", 11);
   orig_x87_fbstp(a1);
 }
+
+#if defined(X87_FCHS)
 void x87_fchs(X87State *a1) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fchs\n", 10);
-#if defined(X87_FCHS)
   // set C1 to 0
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
   // Negate value in ST(0)
   a1->set_st(0, -a1->get_st(0));
-#else
-  orig_x87_fchs(a1);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fchs, (X87State * a1), x9);
+#endif
 
+#if defined(X87_FCMOV)
 void x87_fcmov(X87State *state, unsigned int condition,
                unsigned int st_offset) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fcmov\n", 11);
 
-#if defined(X87_FCMOV)
   // clear precision flag
   state->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
@@ -344,18 +350,21 @@ void x87_fcmov(X87State *state, unsigned int condition,
   }
 
   state->set_st(0, value); // Perform the actual register move
-#else
-  orig_x87_fcmov(state, condition, st_offset);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fcmov,
+                    (X87State * state, unsigned int condition,
+                     unsigned int st_offset),
+                    x9);
+#endif
 
+#if defined(X87_FCOM_ST)
 void x87_fcom_ST(X87State *a1, unsigned int st_offset,
                  unsigned int number_of_pops) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fcom_ST\n", 13);
 
-#if defined(X87_FCOM_ST)
   // Get values to compare
   auto st0 = a1->get_st(0);
   auto src = a1->get_st(st_offset);
@@ -383,16 +392,19 @@ void x87_fcom_ST(X87State *a1, unsigned int st_offset,
   for (unsigned int i = 0; i < number_of_pops; i++) {
     a1->pop();
   }
-#else
-  orig_x87_fcom_ST(a1, st_offset, number_of_pops);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fcom_ST,
+                    (X87State * a1, unsigned int st_offset,
+                     unsigned int number_of_pops),
+                    x9);
+#endif
 
+#if defined(X87_FCOM_F32)
 void x87_fcom_f32(X87State *a1, unsigned int fp32, bool pop) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fcom_f32\n", 14);
-#if defined(X87_FCOM_F32)
   auto st0 = a1->get_st(0);
   auto src = *reinterpret_cast<float *>(&fp32);
 
@@ -417,15 +429,17 @@ void x87_fcom_f32(X87State *a1, unsigned int fp32, bool pop) {
   if (pop) {
     a1->pop();
   }
-#else
-  orig_x87_fcom_f32(a1, fp32, pop);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fcom_f32,
+                    (X87State * a1, unsigned int fp32, bool pop), x9);
+#endif
+
+#if defined(X87_FCOM_F64)
 void x87_fcom_f64(X87State *a1, unsigned long long fp64, bool pop) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fcom_f64\n", 14);
-#if defined(X87_FCOM_F64)
   auto st0 = a1->get_st(0);
   auto src = *reinterpret_cast<double *>(&fp64);
 
@@ -449,16 +463,17 @@ void x87_fcom_f64(X87State *a1, unsigned long long fp64, bool pop) {
   if (pop) {
     a1->pop();
   }
-#else
-  orig_x87_fcom_f64(a1, fp64, pop);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fcom_f64,
+                    (X87State * a1, unsigned long long fp64, bool pop), x9);
+#endif
 
+#if defined(X87_FCOMI)
 uint32_t x87_fcomi(X87State *state, unsigned int st_offset, bool pop) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fcomi\n", 11);
-#if defined(X87_FCOMI)
   state->status_word &= ~(kConditionCode0);
 
   auto st0_val = state->get_st(0);
@@ -489,17 +504,17 @@ uint32_t x87_fcomi(X87State *state, unsigned int st_offset, bool pop) {
   }
 
   return flags;
-#else
-  uint32_t flags = orig_x87_fcomi(state, st_offset, pop);
-  return flags;
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(uint32_t, x87_fcomi,
+                    (X87State * state, unsigned int st_offset, bool pop), x9);
+#endif
 
+#if defined(X87_FCOS)
 void x87_fcos(X87State *a1) {
   SIMDGuardFull simd_guard;
 
   LOG(1, "x87_fcos\n", 10);
-#if defined(X87_FCOS)
   a1->status_word &= ~(kConditionCode1 | kConditionCode2);
   // Get ST(0)
   auto value = a1->get_st(0);
@@ -509,21 +524,22 @@ void x87_fcos(X87State *a1) {
 
   // Store result back in ST(0)
   a1->set_st(0, result);
-#else
-  orig_x87_fcos(a1);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fcos, (X87State * a1), x9);
+#endif
+
 void x87_fdecstp(X87State *a1) {
   MISSING(1, "x87_fdecstp\n", 13);
   orig_x87_fdecstp(a1);
 }
 
+#if defined(X87_FDIV_ST)
 void x87_fdiv_ST(X87State *a1, unsigned int st_offset_1,
                  unsigned int st_offset_2, bool pop_stack) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fdiv_ST\n", 13);
-#if defined(X87_FDIV_ST)
   // Clear condition code 1 and exception flags
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
@@ -537,50 +553,54 @@ void x87_fdiv_ST(X87State *a1, unsigned int st_offset_1,
   if (pop_stack) {
     a1->pop();
   }
-#else
-  orig_x87_fdiv_ST(a1, st_offset_1, st_offset_2, pop_stack);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fdiv_ST,
+                    (X87State * a1, unsigned int st_offset_1,
+                     unsigned int st_offset_2, bool pop_stack),
+                    x9);
+#endif
 
+#if defined(X87_FDIV_F32)
 void x87_fdiv_f32(X87State *a1, unsigned int a2) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fdiv_f32\n", 14);
-#if defined(X87_FDIV_F32)
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
   auto value = *reinterpret_cast<float *>(&a2);
   auto st0 = a1->get_st(0);
 
   a1->set_st(0, st0 / value);
-#else
-  orig_x87_fdiv_f32(a1, a2);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fdiv_f32, (X87State * a1, unsigned int a2), x9);
+#endif
 
+#if defined(X87_FDIV_F64)
 void x87_fdiv_f64(X87State *a1, unsigned long long a2) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fdiv_f64\n", 14);
 
-#if defined(X87_FDIV_F64)
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
   auto value = *reinterpret_cast<double *>(&a2);
   auto st0 = a1->get_st(0);
 
   a1->set_st(0, st0 / value);
-#else
-  orig_x87_fdiv_f64(a1, a2);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fdiv_f64, (X87State * a1, unsigned long long a2),
+                    x9);
+#endif
 
+#if defined(X87_FDIVR_ST)
 void x87_fdivr_ST(X87State *a1, unsigned int st_offset_1,
                   unsigned int st_offset_2, bool pop_stack) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fdivr_ST\n", 14);
-#if defined(X87_FDIVR_ST)
   // Clear condition code 1 and exception flags
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
@@ -594,52 +614,57 @@ void x87_fdivr_ST(X87State *a1, unsigned int st_offset_1,
   if (pop_stack) {
     a1->pop();
   }
-#else
-  orig_x87_fdivr_ST(a1, st_offset_1, st_offset_2, pop_stack);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fdivr_ST,
+                    (X87State * a1, unsigned int st_offset_1,
+                     unsigned int st_offset_2, bool pop_stack),
+                    x9);
+#endif
 
+#if defined(X87_FDIVR_F32)
 void x87_fdivr_f32(X87State *a1, unsigned int a2) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fdivr_f32\n", 15);
-#if defined(X87_FDIVR_F32)
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
   auto value = *reinterpret_cast<float *>(&a2);
   auto st0 = a1->get_st(0);
 
   a1->set_st(0, value / st0);
-#else
-  orig_x87_fdivr_f32(a1, a2);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fdivr_f32, (X87State * a1, unsigned int a2), x9);
+#endif
 
+#if defined(X87_FDIVR_F64)
 void x87_fdivr_f64(X87State *a1, unsigned long long a2) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fdivr_f64\n", 15);
-#if defined(X87_FDIVR_F64)
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
   auto value = *reinterpret_cast<double *>(&a2);
   auto st0 = a1->get_st(0);
 
   a1->set_st(0, value / st0);
-#else
-  orig_x87_fdivr_f64(a1, a2);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fdivr_f64, (X87State * a1, unsigned long long a2),
+                    x9);
+#endif
 
 void x87_ffree(X87State *a1, unsigned int a2) {
   LOG(1, "x87_ffree\n", 11);
   orig_x87_ffree(a1, a2);
 }
+
+#if defined(X87_FIADD)
 void x87_fiadd(X87State *a1, int m32int) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fiadd\n", 11);
-#if defined(X87_FIADD)
   // simple_printf("m32int: %d\n", m32int);
 
   // Clear condition code 1 and exception flags
@@ -653,15 +678,15 @@ void x87_fiadd(X87State *a1, int m32int) {
 
   // Store result back in ST(0)
   a1->set_st(0, st0);
-#else
-  orig_x87_fiadd(a1, m32int);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fiadd, (X87State * a1, int m32int), x9);
+#endif
 
+#if defined(X87_FICOM)
 void x87_ficom(X87State *a1, int src, bool pop) {
   SIMDGuard simd_guard;
   LOG(1, "x87_ficom\n", 11);
-#if defined(X87_FICOM)
   auto st0 = a1->get_st(0);
 
   // Clear condition code bits C0, C2, C3 (bits 8, 9, 14)
@@ -683,16 +708,16 @@ void x87_ficom(X87State *a1, int src, bool pop) {
   if (pop) {
     a1->pop();
   }
-#else
-  orig_x87_ficom(a1, src, pop);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_ficom, (X87State * a1, int src, bool pop), x9);
+#endif
 
+#if defined(X87_FIDIV)
 void x87_fidiv(X87State *a1, int a2) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fidiv\n", 11);
-#if defined(X87_FIDIV)
   // Clear condition code 1 and exception flags
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
@@ -704,16 +729,16 @@ void x87_fidiv(X87State *a1, int a2) {
 
   // Store result back in ST(0)
   a1->set_st(0, value);
-#else
-  orig_x87_fidiv(a1, a2);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fidiv, (X87State * a1, int a2), x9);
+#endif
 
+#if defined(X87_FIDIVR)
 void x87_fidivr(X87State *a1, int a2) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fidivr\n", 12);
-#if defined(X87_FIDIVR)
   // Clear condition code 1 and exception flags
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
@@ -725,33 +750,33 @@ void x87_fidivr(X87State *a1, int a2) {
 
   // Store result back in ST(0)
   a1->set_st(0, value);
-#else
-  orig_x87_fidivr(a1, a2);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fidivr, (X87State * a1, int a2), x9);
+#endif
 
 // Converts the signed-integer source operand into double extended-precision
 // floating-point format and pushes the value onto the FPU register stack. The
 // source operand can be a word, doubleword, or quadword integer. It is loaded
 // without rounding errors. The sign of the source operand is preserved.
+#if defined(X87_FILD)
 void x87_fild(X87State *a1, int64_t value) {
 
-  __asm__ volatile ("" : : : "d0", "d1", "d2", "d3", "d4", "d5", "d6", "d7");
+  __asm__ volatile("" : : : "d0", "d1", "d2", "d3", "d4", "d5", "d6", "d7");
   SIMDGuard simd_guard;
   LOG(1, "x87_fild\n", 10);
 
-#if defined(X87_FILD)
   a1->push();
   a1->set_st(0, static_cast<double>(value));
-#else
-  orig_x87_fild(a1, value);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fild, (X87State * a1, int64_t value), x9);
+#endif
 
+#if defined(X87_FIMUL)
 void x87_fimul(X87State *a1, int a2) {
   SIMDGuard simd_guard;
   LOG(1, "x87_fimul\n", 11);
-#if defined(X87_FIMUL)
   // Clear condition code 1 and exception flags
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
@@ -763,20 +788,21 @@ void x87_fimul(X87State *a1, int a2) {
 
   // Store result back in ST(0)
   a1->set_st(0, value);
-#else
-  orig_x87_fimul(a1, a2);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fimul, (X87State * a1, int a2), x9);
+#endif
+
 void x87_fincstp(X87State *a1) {
   MISSING(1, "x87_fincstp\n", 13);
   orig_x87_fincstp(a1);
 }
 
+#if defined(X87_FIST_I16)
 X87ResultStatusWord x87_fist_i16(X87State const *a1) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fist_i16\n", 14);
-#if defined(X87_FIST_I16)
   auto [value, status_word] = a1->get_st_const(0);
   X87ResultStatusWord result{0, status_word};
 
@@ -818,16 +844,17 @@ X87ResultStatusWord x87_fist_i16(X87State const *a1) {
   }
 
   return result;
-#else
-  return orig_x87_fist_i16(a1);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(X87ResultStatusWord, x87_fist_i16, (X87State const *a1),
+                    x9);
+#endif
 
+#if defined(X87_FIST_I32)
 X87ResultStatusWord x87_fist_i32(X87State const *a1) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fist_i32\n", 14);
-#if defined(X87_FIST_I32)
   auto [value, status_word] = a1->get_st_const(0);
   X87ResultStatusWord result{0, status_word};
 
@@ -868,15 +895,17 @@ X87ResultStatusWord x87_fist_i32(X87State const *a1) {
   }
 
   return result;
-#else
-  return orig_x87_fist_i32(a1);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(X87ResultStatusWord, x87_fist_i32, (X87State const *a1),
+                    x9);
+#endif
+
+#if defined(X87_FIST_I64)
 X87ResultStatusWord x87_fist_i64(X87State const *a1) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fist_i64\n", 14);
-#if defined(X87_FIST_I64)
   // Get value in ST(0)
   auto [value, status_word] = a1->get_st_const(0);
 
@@ -921,57 +950,62 @@ X87ResultStatusWord x87_fist_i64(X87State const *a1) {
   }
 
   return result;
-#else
-  return orig_x87_fist_i64(a1);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(X87ResultStatusWord, x87_fist_i64, (X87State const *a1),
+                    x9);
+#endif
 
+#if defined(X87_FISTT_I16)
 X87ResultStatusWord x87_fistt_i16(X87State const *a1) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fistt_i16\n", 15);
-#if defined(X87_FISTT_I16)
   // Get value in ST(0)
   auto [value, status_word] = a1->get_st_const(0);
 
   return {.signed_result = static_cast<int16_t>(value), status_word};
-#else
-  return orig_x87_fistt_i16(a1);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(X87ResultStatusWord, x87_fistt_i16, (X87State const *a1),
+                    x9);
+#endif
 
+#if defined(X87_FISTT_I32)
 X87ResultStatusWord x87_fistt_i32(X87State const *a1) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fistt_i32\n", 15);
-#if defined(X87_FISTT_I32)
   // Get value in ST(0)
   auto [value, status_word] = a1->get_st_const(0);
 
   return {.signed_result = static_cast<int32_t>(value), status_word};
-#else
-  return orig_x87_fistt_i32(a1);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(X87ResultStatusWord, x87_fistt_i32, (X87State const *a1),
+                    x9);
+#endif
 
+#if defined(X87_FISTT_I64)
 X87ResultStatusWord x87_fistt_i64(X87State const *a1) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fistt_i64\n", 15);
-#if defined(X87_FISTT_I64)
   // Get value in ST(0)
   auto [value, status_word] = a1->get_st_const(0);
 
   return {.signed_result = static_cast<int64_t>(value), status_word};
-#else
-  return orig_x87_fistt_i64(a1);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(X87ResultStatusWord, x87_fistt_i64, (X87State const *a1),
+                    x9);
+#endif
+
+#if defined(X87_FISUB)
 void x87_fisub(X87State *a1, int a2) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fisub\n", 11);
-#if defined(X87_FISUB)
   // Clear condition code 1
   a1->status_word &= ~(X87StatusWordFlag::kConditionCode1);
 
@@ -983,17 +1017,17 @@ void x87_fisub(X87State *a1, int a2) {
 
   // Store result back in ST(0)
   a1->set_st(0, value);
-#else
-  orig_x87_fisub(a1, a2);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fisub, (X87State * a1, int a2), x9);
+#endif
 
+#if defined(X87_FISUBR)
 void x87_fisubr(X87State *a1, int a2) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fisubr\n", 12);
 
-#if defined(X87_FISUBR)
   // Clear condition code 1
   a1->status_word &= ~(X87StatusWordFlag::kConditionCode1);
 
@@ -1005,17 +1039,17 @@ void x87_fisubr(X87State *a1, int a2) {
 
   // Store result back in ST(0)
   a1->set_st(0, value);
-#else
-  orig_x87_fisubr(a1, a2);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fisubr, (X87State * a1, int a2), x9);
+#endif
 
 // Push ST(i) onto the FPU register stack.
+#if defined(X87_FLD_STI)
 void x87_fld_STi(X87State *a1, unsigned int st_offset) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fld_STi\n", 13);
-#if defined(X87_FLD_STI)
   a1->status_word &= ~0x200u;
 
   // Get index of ST(i) register
@@ -1026,16 +1060,18 @@ void x87_fld_STi(X87State *a1, unsigned int st_offset) {
 
   // Copy value from ST(i) to ST(0)
   a1->set_st(0, value);
-#else
-  orig_x87_fld_STi(a1, st_offset);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fld_STi, (X87State * a1, unsigned int st_offset),
+                    x9);
+#endif
+
+#if defined(X87_FLD_CONSTANT)
 void x87_fld_constant(X87State *a1, X87Constant a2) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fld_constant\n", 18);
   // simple_printf("x87_fld_constant %d\n", (int)a2);
-#if defined(X87_FLD_CONSTANT)
   switch (a2) {
   case X87Constant::kOne: { // fld1
     a1->push();
@@ -1081,60 +1117,63 @@ void x87_fld_constant(X87State *a1, X87Constant a2) {
     simple_printf("x87_fld_constant ERROR %d\n", (int)a2);
   } break;
   }
-#else
-  orig_x87_fld_constant(a1, a2);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fld_constant, (X87State * a1, X87Constant a2),
+                    x9);
+#endif
+
+#if defined(X87_FLD_FP32)
 void x87_fld_fp32(X87State *a1, unsigned int a2) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fld_fp32\n", 14);
 
-#if defined(X87_FLD_FP32)
   // Push new value onto stack, get reference to new top
   a1->push();
 
   a1->set_st(0, *reinterpret_cast<float *>(&a2));
-#else
-  orig_x87_fld_fp32(a1, a2);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fld_fp32, (X87State * a1, unsigned int a2), x9);
+#endif
 
+#if defined(X87_FLD_FP64)
 void x87_fld_fp64(X87State *a1, unsigned long long a2) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fld_fp64\n", 14);
 
-#if defined(X87_FLD_FP64)
   // Push new value onto stack, get reference to new top
   a1->push();
 
   a1->set_st(0, *reinterpret_cast<double *>(&a2));
-#else
-  orig_x87_fld_fp64(a1, a2);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fld_fp64, (X87State * a1, unsigned long long a2),
+                    x9);
+#endif
 
+#if defined(X87_FLD_FP80)
 void x87_fld_fp80(X87State *a1, X87Float80 a2) {
   LOG(1, "x87_fld_fp80\n", 14);
 
-#if defined(X87_FLD_FP80)
   auto ieee754 = ConvertX87RegisterToFloat64(a2, &a1->status_word);
 
   a1->push();
   a1->set_st(0, ieee754);
-#else
-  orig_x87_fld_fp80(a1, a2);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fld_fp80, (X87State * a1, X87Float80 a2), x9);
+#endif
 
+#if defined(X87_FMUL_ST)
 void x87_fmul_ST(X87State *a1, unsigned int st_offset_1,
                  unsigned int st_offset_2, bool pop_stack) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fmul_ST\n", 13);
 
-#if defined(X87_FMUL_ST)
   // Clear condition code 1 and exception flags
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
@@ -1148,52 +1187,56 @@ void x87_fmul_ST(X87State *a1, unsigned int st_offset_1,
   if (pop_stack) {
     a1->pop();
   }
-#else
-  orig_x87_fmul_ST(a1, st_offset_1, st_offset_2, pop_stack);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fmul_ST,
+                    (X87State * a1, unsigned int st_offset_1,
+                     unsigned int st_offset_2, bool pop_stack),
+                    x9);
+#endif
 
+#if defined(X87_FMUL_F32)
 void x87_fmul_f32(X87State *a1, unsigned int fp32) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fmul_f32\n", 14);
 
-#if defined(X87_FMUL_F32)
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
   auto value = *reinterpret_cast<float *>(&fp32);
   auto st0 = a1->get_st(0);
 
   a1->set_st(0, st0 * value);
-#else
-  orig_x87_fmul_f32(a1, fp32);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fmul_f32, (X87State * a1, unsigned int fp32), x9);
+#endif
 
+#if defined(X87_FMUL_F64)
 void x87_fmul_f64(X87State *a1, unsigned long long a2) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fmul_f64\n", 14);
 
-#if defined(X87_FMUL_F64)
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
   auto value = *reinterpret_cast<double *>(&a2);
   auto st0 = a1->get_st(0);
 
   a1->set_st(0, st0 * value);
-#else
-  orig_x87_fmul_f64(a1, a2);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fmul_f64, (X87State * a1, unsigned long long a2),
+                    x9);
+#endif
 
 // Replace ST(1) with arctan(ST(1)/ST(0)) and pop the register stack.
+#if defined(X87_FPATAN)
 void x87_fpatan(X87State *a1) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fpatan\n", 12);
 
-#if defined(X87_FPATAN)
   a1->status_word &= ~(X87StatusWordFlag::kConditionCode1);
 
   // Get values from ST(0) and ST(1)
@@ -1207,10 +1250,10 @@ void x87_fpatan(X87State *a1) {
   a1->set_st(1, result);
 
   a1->pop();
-#else
-  orig_x87_fpatan(a1);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fpatan, (X87State * a1), x9);
+#endif
 
 // Replace ST(0) with the remainder obtained from dividing ST(0) by ST(1).
 // Computes the remainder obtained from dividing the value in the ST(0) register
@@ -1225,12 +1268,12 @@ void x87_fpatan(X87State *a1) {
 // control has no effect. The following table shows the results obtained when
 // computing the remainder of various classes of numbers, assuming that
 // underflow does not occur.
+#if defined(X87_FPREM)
 void x87_fprem(X87State *a1) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fprem\n", 11);
 
-#if defined(X87_FPREM)
   // Clear condition code bits initially
   a1->status_word &= ~(
       X87StatusWordFlag::kConditionCode0 | X87StatusWordFlag::kConditionCode1 |
@@ -1285,11 +1328,11 @@ void x87_fprem(X87State *a1) {
   // simple_printf("final result=%f\n", result);
 
   a1->set_st(0, result);
-
-#else
-  orig_x87_fprem(a1);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fprem, (X87State * a1), x9);
+#endif
+
 void x87_fprem1(X87State *a1) {
   MISSING(1, "x87_fprem1\n", 12);
   orig_x87_fprem1(a1);
@@ -1300,12 +1343,12 @@ void x87_fprem1(X87State *a1) {
 // following table shows the unmasked results obtained when computing the
 // partial tangent of various classes of numbers, assuming that underflow does
 // not occur.
+#if defined(X87_FPTAN)
 void x87_fptan(X87State *a1) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fptan\n", 11);
 
-#if defined(X87_FPTAN)
   a1->status_word &= ~(X87StatusWordFlag::kConditionCode1 |
                        X87StatusWordFlag::kConditionCode2);
 
@@ -1321,20 +1364,20 @@ void x87_fptan(X87State *a1) {
   // Push 1.0 onto the FPU register stack
   a1->push();
   a1->set_st(0, 1.0);
-#else
-  orig_x87_fptan(a1);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fptan, (X87State * a1), x9);
+#endif
 
 // Rounds the source value in the ST(0) register to the nearest integral value,
 // depending on the current rounding mode (setting of the RC field of the FPU
 // control word), and stores the result in ST(0).
+#if defined(X87_FRNDINT)
 void x87_frndint(X87State *a1) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_frndint\n", 13);
 
-#if defined(X87_FRNDINT)
   a1->status_word &= ~(X87StatusWordFlag::kConditionCode1);
 
   // Get current value and round it
@@ -1361,10 +1404,10 @@ void x87_frndint(X87State *a1) {
 
   // Store rounded value and update tag
   a1->set_st(0, rounded);
-#else
-  orig_x87_frndint(a1);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_frndint, (X87State * a1), x9);
+#endif
 
 // Truncates the value in the source operand (toward 0) to an integral value and
 // adds that value to the exponent of the destination operand. The destination
@@ -1373,12 +1416,12 @@ void x87_frndint(X87State *a1) {
 // division by integral powers of 2. The following table shows the results
 // obtained when scaling various classes of numbers, assuming that neither
 // overflow nor underflow occurs.
+#if defined(X87_FSCALE)
 void x87_fscale(X87State *state) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fscale\n", 12);
 
-#if defined(X87_FSCALE)
   state->status_word &= ~(X87StatusWordFlag::kConditionCode1);
 
   // Get values from ST(0) and ST(1)
@@ -1398,17 +1441,17 @@ void x87_fscale(X87State *state) {
 
   // Store result back in ST(0)
   state->set_st(0, result);
-#else
-  orig_x87_fscale(state);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fscale, (X87State * state), x9);
+#endif
 
+#if defined(X87_FSIN)
 void x87_fsin(X87State *a1) {
   SIMDGuardFull simd_guard;
 
   LOG(1, "x87_fsin\n", 10);
 
-#if defined(X87_FSIN)
   a1->status_word &= ~(X87StatusWordFlag::kConditionCode1 |
                        X87StatusWordFlag::kConditionCode2);
 
@@ -1419,10 +1462,10 @@ void x87_fsin(X87State *a1) {
 
   // Store result and update tag
   a1->set_st(0, sin(value));
-#else
-  orig_x87_fsin(a1);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fsin, (X87State * a1), x9);
+#endif
 
 // Compute the sine and cosine of ST(0); replace ST(0) with the approximate
 // sine, and push the approximate cosine onto the register stack.
@@ -1438,12 +1481,12 @@ IF ST(0) < 2^63
         C2 := 1;
 FI;
 */
+#if defined(X87_FSINCOS)
 void x87_fsincos(X87State *a1) {
   SIMDGuardFull simd_guard;
 
   LOG(1, "x87_fsincos\n", 13);
 
-#if defined(X87_FSINCOS)
   a1->status_word &= ~(X87StatusWordFlag::kConditionCode1 |
                        X87StatusWordFlag::kConditionCode2);
 
@@ -1463,17 +1506,18 @@ void x87_fsincos(X87State *a1) {
 
   // Clear C2 condition code bit
   a1->status_word &= ~X87StatusWordFlag::kConditionCode2;
-#else
-  orig_x87_fsincos(a1);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fsincos, (X87State * a1), x9);
+#endif
+
 // Computes square root of ST(0) and stores the result in ST(0).
+#if defined(X87_FSQRT)
 void x87_fsqrt(X87State *a1) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fsqrt\n", 11);
 
-#if defined(X87_FSQRT)
   a1->status_word &= ~(X87StatusWordFlag::kConditionCode1);
 
   // Get current value and calculate sqrt
@@ -1483,17 +1527,17 @@ void x87_fsqrt(X87State *a1) {
 
   // Store result and update tag
   a1->set_st(0, sqrt(value));
-#else
-  orig_x87_fsqrt(a1);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fsqrt, (X87State * a1), x9);
+#endif
 
+#if defined(X87_FST_STI)
 void x87_fst_STi(X87State *a1, unsigned int st_offset, bool pop) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fst_STi\n", 13);
 
-#if defined(X87_FST_STI)
   // Clear C1 condition code (bit 9)
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
@@ -1504,46 +1548,49 @@ void x87_fst_STi(X87State *a1, unsigned int st_offset, bool pop) {
   if (pop) {
     a1->pop();
   }
-#else
-  orig_x87_fst_STi(a1, st_offset, pop);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fst_STi,
+                    (X87State * a1, unsigned int st_offset, bool pop), x9);
+#endif
 
+#if defined(X87_FST_FP32)
 X87ResultStatusWord x87_fst_fp32(X87State const *a1) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fst_fp32\n", 14);
 
-#if defined(X87_FST_FP32)
   auto [value, status_word] = a1->get_st_const32(0);
   float tmp = value;
   return {*reinterpret_cast<uint32_t *>(&tmp), status_word};
-#else
-  return orig_x87_fst_fp32(a1);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(X87ResultStatusWord, x87_fst_fp32, (X87State const *a1),
+                    x9);
+#endif
 
+#if defined(X87_FST_FP64)
 X87ResultStatusWord x87_fst_fp64(X87State const *a1) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fst_fp64\n", 14);
 
-#if defined(X87_FST_FP64)
   // Create temporary double to ensure proper value representation
   auto [value, status_word] = a1->get_st_const(0);
   double tmp = value;
   return {*reinterpret_cast<uint64_t *>(&tmp), status_word};
-#else
-  return orig_x87_fst_fp64(a1);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(X87ResultStatusWord, x87_fst_fp64, (X87State const *a1),
+                    x9);
+#endif
 
+#if defined(X87_FST_FP80)
 X87Float80 x87_fst_fp80(X87State const *a1) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fst_fp80\n", 14);
 
-#if defined(X87_FST_FP80)
   // Get value from ST(0)
   auto [value, status_word] = a1->get_st_const(0);
 
@@ -1594,17 +1641,18 @@ X87Float80 x87_fst_fp80(X87State const *a1) {
   result.exponent = sign | (exp + 16383 - 127);
 
   return result;
-#else
-  return orig_x87_fst_fp80(a1);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(X87Float80, x87_fst_fp80, (X87State const *a1), x9);
+#endif
+
+#if defined(X87_FSUB_ST)
 void x87_fsub_ST(X87State *a1, unsigned int st_offset1, unsigned int st_offset2,
                  bool pop) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fsub_ST\n", 13);
 
-#if defined(X87_FSUB_ST)
   // Clear condition code 1 and exception flags
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
@@ -1618,52 +1666,56 @@ void x87_fsub_ST(X87State *a1, unsigned int st_offset1, unsigned int st_offset2,
   if (pop) {
     a1->pop();
   }
-#else
-  orig_x87_fsub_ST(a1, st_offset1, st_offset2, pop);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fsub_ST,
+                    (X87State * a1, unsigned int st_offset1,
+                     unsigned int st_offset2, bool pop),
+                    x9);
+#endif
 
+#if defined(X87_FSUB_F32)
 void x87_fsub_f32(X87State *a1, unsigned int a2) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fsub_f32\n", 14);
 
-#if defined(X87_FSUB_F32)
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
   auto value = *reinterpret_cast<float *>(&a2);
   auto st0 = a1->get_st(0);
 
   a1->set_st(0, st0 - value);
-#else
-  orig_x87_fsub_f32(a1, a2);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fsub_f32, (X87State * a1, unsigned int a2), x9);
+#endif
 
+#if defined(X87_FSUB_F64)
 void x87_fsub_f64(X87State *a1, unsigned long long a2) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fsub_f64\n", 14);
 
-#if defined(X87_FSUB_F64)
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
   auto value = *reinterpret_cast<double *>(&a2);
   auto st0 = a1->get_st(0);
 
   a1->set_st(0, st0 - value);
-#else
-  orig_x87_fsub_f64(a1, a2);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fsub_f64, (X87State * a1, unsigned long long a2),
+                    x9);
+#endif
 
+#if defined(X87_FSUBR_ST)
 void x87_fsubr_ST(X87State *a1, unsigned int st_offset1,
                   unsigned int st_offset2, bool pop) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fsubr_ST\n", 14);
 
-#if defined(X87_FSUBR_ST)
   // Clear condition code 1 and exception flags
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
@@ -1678,50 +1730,54 @@ void x87_fsubr_ST(X87State *a1, unsigned int st_offset1,
   if (pop) {
     a1->pop();
   }
-#else
-  orig_x87_fsubr_ST(a1, st_offset1, st_offset2, pop);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fsubr_ST,
+                    (X87State * a1, unsigned int st_offset1,
+                     unsigned int st_offset2, bool pop),
+                    x9);
+#endif
 
+#if defined(X87_FSUBR_F32)
 void x87_fsubr_f32(X87State *a1, unsigned int a2) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fsubr_f32\n", 15);
 
-#if defined(X87_FSUBR_F32)
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
   auto value = *reinterpret_cast<float *>(&a2);
   auto st0 = a1->get_st(0);
 
   a1->set_st(0, value - st0);
-#else
-  orig_x87_fsubr_f32(a1, a2);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fsubr_f32, (X87State * a1, unsigned int a2), x9);
+#endif
 
+#if defined(X87_FSUBR_F64)
 void x87_fsubr_f64(X87State *a1, unsigned long long a2) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fsubr_f64\n", 15);
 
-#if defined(X87_FSUBR_F64)
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
   auto value = *reinterpret_cast<double *>(&a2);
   auto st0 = a1->get_st(0);
 
   a1->set_st(0, value - st0);
-#else
-  orig_x87_fsubr_f64(a1, a2);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fsubr_f64, (X87State * a1, unsigned long long a2),
+                    x9);
+#endif
 
+#if defined(X87_FUCOM)
 void x87_fucom(X87State *a1, unsigned int st_offset, unsigned int pop) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fucom\n", 11);
-#if defined(X87_FUCOM)
   auto st0 = a1->get_st(0);
   auto src = a1->get_st(st_offset);
 
@@ -1744,18 +1800,21 @@ void x87_fucom(X87State *a1, unsigned int st_offset, unsigned int pop) {
   for (auto i = 0; i < pop; ++i) {
     a1->pop();
   }
-#else
-  orig_x87_fucom(a1, st_offset, pop);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fucom,
+                    (X87State * a1, unsigned int st_offset, unsigned int pop),
+                    x9);
+#endif
+
 // Compare ST(0) with ST(i), check for ordered values, set status flags
 // accordingly, and pop register stack.
+#if defined(X87_FUCOMI)
 uint32_t x87_fucomi(X87State *state, unsigned int st_offset, bool pop_stack) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fucomi\n", 12);
 
-#if defined(X87_FUCOMI)
   state->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
   auto st0_val = state->get_st(0);
@@ -1786,10 +1845,12 @@ uint32_t x87_fucomi(X87State *state, unsigned int st_offset, bool pop_stack) {
   }
 
   return flags;
-#else
-  return orig_x87_fucomi(state, st_offset, pop_stack);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(uint32_t, x87_fucomi,
+                    (X87State * state, unsigned int st_offset, bool pop_stack),
+                    x9);
+#endif
 
 /*
 C1 := sign bit of ST; (* 0 for positive, 1 for negative *)
@@ -1810,12 +1871,12 @@ CASE (class of value or number in ST(0)) OF
 ESAC;
 
 */
+#if defined(X87_FXAM)
 void x87_fxam(X87State *a1) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fxam\n", 10);
 
-#if defined(X87_FXAM)
   // Get tag state for ST(0)
   X87TagState tag = a1->get_st_tag(0);
 
@@ -1862,17 +1923,17 @@ void x87_fxam(X87State *a1) {
   } else {
     a1->status_word |= X87StatusWordFlag::kConditionCode2; // 010 (normal)
   }
-#else
-  orig_x87_fxam(a1);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fxam, (X87State * a1), x9);
+#endif
 
+#if defined(X87_FXCH)
 void x87_fxch(X87State *a1, unsigned int st_offset) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fxch\n", 10);
 
-#if defined(X87_FXCH)
   // Clear condition code 1
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
@@ -1881,17 +1942,18 @@ void x87_fxch(X87State *a1, unsigned int st_offset) {
 
   a1->set_st(0, sti);
   a1->set_st(st_offset, st0);
-#else
-  orig_x87_fxch(a1, st_offset);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fxch, (X87State * a1, unsigned int st_offset),
+                    x9);
+#endif
 
+#if defined(X87_FXTRACT)
 void x87_fxtract(X87State *a1) {
   SIMDGuardFull simd_guard;
 
   LOG(1, "x87_fxtract\n", 13);
 
-#if defined(X87_FXTRACT)
   auto st0 = a1->get_st(0);
 
   // If the floating-point zero-divide exception (#Z) is masked and the source
@@ -1917,10 +1979,10 @@ void x87_fxtract(X87State *a1) {
 
   a1->push();
   a1->set_st(0, m);
-#else
-  orig_x87_fxtract(a1);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fxtract, (X87State * a1), x9);
+#endif
 
 void fyl2x_common(X87State *state, double constant) {
   // Clear condition code 1
@@ -1941,43 +2003,44 @@ void fyl2x_common(X87State *state, double constant) {
 }
 
 // Replace ST(1) with (ST(1) ∗ log2ST(0)) and pop the register stack.
+#if defined(X87_FYL2X)
 void x87_fyl2x(X87State *state) {
   SIMDGuardFull simd_guard;
   LOG(1, "x87_fyl2x\n", 12);
 
-#if defined(X87_FYL2X)
   fyl2x_common(state, 0.0);
-#else
-  orig_x87_fyl2x(state);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fyl2x, (X87State * state), x9);
+#endif
 
 // Replace ST(1) with (ST(1) ∗ log2ST(0 + 1.0)) and pop the register stack.
+#if defined(X87_FYL2XP1)
 void x87_fyl2xp1(X87State *state) {
   SIMDGuardFull simd_guard;
   LOG(1, "x87_fyl2xp1\n", 14);
 
-#if defined(X87_FYL2XP1)
   fyl2x_common(state, 1.0);
-#else
-  orig_x87_fyl2xp1(state);
-#endif
 }
+#else
+X87_TRAMPOLINE_ARGS(void, x87_fyl2xp1, (X87State * state), x9);
+#endif
 
-X87_TRAMPOLINE(sse_pcmpestri, x8)
-X87_TRAMPOLINE(sse_pcmpestrm, x8)
-X87_TRAMPOLINE(sse_pcmpistri, x8)
-X87_TRAMPOLINE(sse_pcmpistrm, x8)
-X87_TRAMPOLINE(is_ldt_initialized, x8)
-X87_TRAMPOLINE(get_ldt, x8)
-X87_TRAMPOLINE(set_ldt, x8)
-X87_TRAMPOLINE(execution_mode_for_code_segment_selector, x8)
-X87_TRAMPOLINE(mov_segment, x8)
-X87_TRAMPOLINE(abi_for_address, x8)
-X87_TRAMPOLINE(determine_state_recovery_action, x8)
-X87_TRAMPOLINE(get_segment_limit, x8)
-X87_TRAMPOLINE(translator_set_variant, x8)
+X87_TRAMPOLINE(sse_pcmpestri, x9)
+X87_TRAMPOLINE(sse_pcmpestrm, x9)
+X87_TRAMPOLINE(sse_pcmpistri, x9)
+X87_TRAMPOLINE(sse_pcmpistrm, x9)
+X87_TRAMPOLINE(is_ldt_initialized, x9)
+X87_TRAMPOLINE(get_ldt, x9)
+X87_TRAMPOLINE(set_ldt, x9)
+X87_TRAMPOLINE(execution_mode_for_code_segment_selector, x9)
+X87_TRAMPOLINE(mov_segment, x9)
+X87_TRAMPOLINE(abi_for_address, x9)
+
+X87_TRAMPOLINE(determine_state_recovery_action, x9)
+X87_TRAMPOLINE(get_segment_limit, x9)
+X87_TRAMPOLINE(translator_set_variant, x9)
 
 X87_TRAMPOLINE(runtime_cpuid, x22)
-X87_TRAMPOLINE(runtime_wide_udiv_64, x25)
-X87_TRAMPOLINE(runtime_wide_sdiv_64, x22)
+X87_TRAMPOLINE(runtime_wide_udiv_64, x9)
+X87_TRAMPOLINE(runtime_wide_sdiv_64, x9)
