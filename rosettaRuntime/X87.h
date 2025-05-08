@@ -96,13 +96,13 @@ using translator_apply_fixups_t = decltype(&translator_apply_fixups);
 void x87_init(X87State*);
 using x87_init_t = decltype(&x87_init);
 
-void x87_state_from_x86_float_state(X87State*, X86FloatState64 const*);
+void x87_state_from_x86_float_state();
 using x87_state_from_x86_float_state_t = decltype(&x87_state_from_x86_float_state);
 
-void x87_state_to_x86_float_state(X87State const*, X86FloatState64*);
+void x87_state_to_x86_float_state();
 using x87_state_to_x86_float_state_t = decltype(&x87_state_to_x86_float_state);
 
-void x87_pop_register_stack(X87State*);
+void x87_pop_register_stack();
 using x87_pop_register_stack_t = decltype(&x87_pop_register_stack);
 
 void x87_f2xm1(X87State*);

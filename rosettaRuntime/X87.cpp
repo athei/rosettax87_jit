@@ -128,18 +128,22 @@ void x87_init(X87State *a1) {
   *a1 = X87State();
 #endif
 }
-void x87_state_from_x86_float_state(X87State *a1, X86FloatState64 const *a2) {
-  MISSING(1, "x87_state_from_x86_float_state\n", 31);
-  orig_x87_state_from_x86_float_state(a1, a2);
-}
-void x87_state_to_x86_float_state(X87State const *a1, X86FloatState64 *a2) {
-  MISSING(1, "x87_state_to_x86_float_state\n", 29);
-  orig_x87_state_to_x86_float_state(a1, a2);
-}
-void x87_pop_register_stack(X87State *a1) {
-  MISSING(1, "x87_pop_register_stack\n", 23);
-  orig_x87_pop_register_stack(a1);
-}
+// void x87_state_from_x86_float_state(X87State *a1, X86FloatState64 const *a2) {
+//   MISSING(1, "x87_state_from_x86_float_state\n", 31);
+//   orig_x87_state_from_x86_float_state(a1, a2);
+// }
+// void x87_state_to_x86_float_state(X87State const *a1, X86FloatState64 *a2) {
+//   MISSING(1, "x87_state_to_x86_float_state\n", 29);
+//   orig_x87_state_to_x86_float_state(a1, a2);
+// }
+// void x87_pop_register_stack(X87State *a1) {
+//   MISSING(1, "x87_pop_register_stack\n", 23);
+//   orig_x87_pop_register_stack(a1);
+// }
+
+X87_TRAMPOLINE(x87_state_from_x86_float_state, x9);
+X87_TRAMPOLINE(x87_state_to_x86_float_state, x9);
+X87_TRAMPOLINE(x87_pop_register_stack, x9);
 // Computes the exponential value of 2 to the power of the source operand
 // minus 1. The source operand is located in register ST(0) and the result is
 // also stored in ST(0). The value of the source operand must lie in the range
@@ -254,12 +258,12 @@ double BCD2Double(uint8_t bcd[10]) {
   uint64_t mult = 1;
   uint8_t piece;
 
-  for (int i=0; i<9; ++i) {
-      piece = bcd[i];
-      tmp += mult * (piece & 0x0F);
-      mult *= 10;
-      tmp += mult * ((piece >> 4) & 0x0F);
-      mult *= 10;
+  for (int i = 0; i < 9; ++i) {
+    piece = bcd[i];
+    tmp += mult * (piece & 0x0F);
+    mult *= 10;
+    tmp += mult * ((piece >> 4) & 0x0F);
+    mult *= 10;
   }
 
   piece = bcd[9];
@@ -268,7 +272,7 @@ double BCD2Double(uint8_t bcd[10]) {
   double value = static_cast<double>(tmp);
 
   if (piece & 0x80) {
-      value = -value; 
+    value = -value;
   }
 
   return value;
@@ -283,12 +287,12 @@ void x87_fbld(X87State *a1, unsigned long long a2, unsigned long long a3) {
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
   uint8_t bcd[10];
-  memcpy(bcd, &a2, 8);           // Copy 8 bytes from a2
-  memcpy(bcd + 8, &a3, 2);       // Copy 2 bytes from a3
+  memcpy(bcd, &a2, 8);     // Copy 8 bytes from a2
+  memcpy(bcd + 8, &a3, 2); // Copy 2 bytes from a3
 
   auto value = BCD2Double(bcd);
 
-  //Add space on the stack and push the converted BCD
+  // Add space on the stack and push the converted BCD
   a1->push();
   a1->set_st(0, value);
 #else
@@ -492,7 +496,7 @@ uint32_t x87_fcomi(X87State *state, unsigned int st_offset, bool pop) {
 }
 
 void x87_fcos(X87State *a1) {
-  SIMDGuard simd_guard;
+  SIMDGuardFull simd_guard;
 
   LOG(1, "x87_fcos\n", 10);
 #if defined(X87_FCOS)
@@ -731,6 +735,8 @@ void x87_fidivr(X87State *a1, int a2) {
 // source operand can be a word, doubleword, or quadword integer. It is loaded
 // without rounding errors. The sign of the source operand is preserved.
 void x87_fild(X87State *a1, int64_t value) {
+
+  __asm__ volatile ("" : : : "d0", "d1", "d2", "d3", "d4", "d5", "d6", "d7");
   SIMDGuard simd_guard;
   LOG(1, "x87_fild\n", 10);
 
@@ -1398,7 +1404,7 @@ void x87_fscale(X87State *state) {
 }
 
 void x87_fsin(X87State *a1) {
-  SIMDGuard simd_guard;
+  SIMDGuardFull simd_guard;
 
   LOG(1, "x87_fsin\n", 10);
 
@@ -1433,7 +1439,7 @@ IF ST(0) < 2^63
 FI;
 */
 void x87_fsincos(X87State *a1) {
-  SIMDGuard simd_guard;
+  SIMDGuardFull simd_guard;
 
   LOG(1, "x87_fsincos\n", 13);
 
@@ -1739,7 +1745,7 @@ void x87_fucom(X87State *a1, unsigned int st_offset, unsigned int pop) {
     a1->pop();
   }
 #else
-  orig_x87_fucom(a1, src, pop);
+  orig_x87_fucom(a1, st_offset, pop);
 #endif
 }
 // Compare ST(0) with ST(i), check for ordered values, set status flags
@@ -1881,7 +1887,7 @@ void x87_fxch(X87State *a1, unsigned int st_offset) {
 }
 
 void x87_fxtract(X87State *a1) {
-  SIMDGuard simd_guard;
+  SIMDGuardFull simd_guard;
 
   LOG(1, "x87_fxtract\n", 13);
 
@@ -1916,7 +1922,7 @@ void x87_fxtract(X87State *a1) {
 #endif
 }
 
-void fyl2x_common(X87State *state, double constant){
+void fyl2x_common(X87State *state, double constant) {
   // Clear condition code 1
   state->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
@@ -1925,7 +1931,7 @@ void fyl2x_common(X87State *state, double constant){
   auto st1 = state->get_st(1);
 
   // Calculate y * log2(x)
-  auto result = st1 * (log2(st0+constant));
+  auto result = st1 * (log2(st0 + constant));
 
   // Pop ST(0)
   state->pop();
@@ -1936,7 +1942,7 @@ void fyl2x_common(X87State *state, double constant){
 
 // Replace ST(1) with (ST(1) ∗ log2ST(0)) and pop the register stack.
 void x87_fyl2x(X87State *state) {
-  SIMDGuard simd_guard;
+  SIMDGuardFull simd_guard;
   LOG(1, "x87_fyl2x\n", 12);
 
 #if defined(X87_FYL2X)
@@ -1948,13 +1954,13 @@ void x87_fyl2x(X87State *state) {
 
 // Replace ST(1) with (ST(1) ∗ log2ST(0 + 1.0)) and pop the register stack.
 void x87_fyl2xp1(X87State *state) {
-  SIMDGuard simd_guard;
+  SIMDGuardFull simd_guard;
   LOG(1, "x87_fyl2xp1\n", 14);
 
 #if defined(X87_FYL2XP1)
   fyl2x_common(state, 1.0);
 #else
-  orig_x87_fyl2xp(state);
+  orig_x87_fyl2xp1(state);
 #endif
 }
 
