@@ -362,7 +362,7 @@ uint128_t x87_fbstp(X87State *a1) {
   };
 }
 #else
-X87_TRAMPOLINE_ARGS(uint128_t, x87_fbstp, (X87State const *a1), x9);
+X87_TRAMPOLINE_ARGS(uint128_t, x87_fbstp, (X87State *a1), x9);
 #endif
 
 #if defined(X87_FCHS)
@@ -1659,7 +1659,7 @@ X87_TRAMPOLINE_ARGS(X87ResultStatusWord, x87_fst_fp64, (X87State const *a1),
 #endif
 
 #if defined(X87_FST_FP80)
-X87Float80 x87_fst_fp80(X87State const *a1) {
+X87Float80StatusWordResult x87_fst_fp80(X87State const *a1) {
   SIMDGuard simd_guard;
 
   LOG(1, "x87_fst_fp80\n", 14);
@@ -1669,14 +1669,14 @@ X87Float80 x87_fst_fp80(X87State const *a1) {
 
   float tmp = value;
   uint32_t float32 = *reinterpret_cast<uint32_t *>(&tmp);
-  ;
 
   // Extract components from float32
   uint32_t mantissa = float32 & 0x7FFFFF; // 23 bits
   uint8_t exp = (float32 >> 23) & 0xFF;   // 8 bits
   uint16_t sign = (float32 >> 31) << 15;  // Move sign to bit 15
 
-  X87Float80 result;
+  X87Float80StatusWordResult result;
+  result.status_word = status_word;
 
   // Handle zero
   if (exp == 0 && mantissa == 0) {

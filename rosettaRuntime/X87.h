@@ -26,6 +26,11 @@ struct SegmentRegisters {};
 enum SegmentRegister {};
 struct X87State;
 
+struct X87Float80StatusWordResult {
+  uint64_t mantissa;
+  uint16_t exponent;
+  uint16_t status_word;
+};
 
 struct X87ResultStatusWord {
   union {
@@ -281,7 +286,7 @@ using x87_fst_fp32_t = decltype(&x87_fst_fp32);
 X87ResultStatusWord x87_fst_fp64(X87State const*);
 using x87_fst_fp64_t = decltype(&x87_fst_fp64);
 
-X87Float80 x87_fst_fp80(X87State const*);
+X87Float80StatusWordResult x87_fst_fp80(X87State const*);
 using x87_fst_fp80_t = decltype(&x87_fst_fp80);
 
 void x87_fsub_ST(X87State*, unsigned int, unsigned int, bool);
