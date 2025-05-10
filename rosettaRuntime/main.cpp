@@ -1,5 +1,3 @@
-extern "C" __attribute__((naked, used)) void _start() {
-  asm volatile(
-      ".globl start\n"
-      "start:\n");
-}
+extern "C" __attribute__((used, visibility("default"), section("__TEXT,__text"),
+                          noinline, retain)) void
+start() {}

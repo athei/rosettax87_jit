@@ -6,8 +6,6 @@
 #include "X87State.h"
 #include "openlibm_math.h"
 
-#include <bit>
-
 #define X87_F2XM1
 #define X87_FABS
 #define X87_FADD_ST
@@ -147,12 +145,12 @@ void x87_f2xm1(X87State *state) {
 
   LOG(1, "x87_f2xm1\n", 10);
   // Get value from ST(0)
-  auto x = state->get_st(0);
+  auto x = state->get_st_fast(0);
 
   // // Check range [-1.0, +1.0]
   if (x < -1.0f || x > 1.0f) {
     // Set to NaN for undefined result
-    state->set_st(0, 0);
+    state->set_st_fast(0, 0);
     return;
   }
 
@@ -160,7 +158,7 @@ void x87_f2xm1(X87State *state) {
   auto result = exp2(x) - 1.0f;
 
   // Store result back in ST(0)
-  state->set_st(0, result);
+  state->set_st_fast(0, result);
 }
 #else
 X87_TRAMPOLINE_ARGS(void, x87_f2xm1, (X87State * state), x9);
@@ -179,10 +177,10 @@ void x87_fabs(X87State *a1) {
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
   // Get value in ST(0)
-  auto value = a1->get_st(0);
+  auto value = a1->get_st_fast(0);
 
   // Set value in ST(0) to its absolute value
-  a1->set_st(0, value < 0 ? -value : value);
+  a1->set_st_fast(0, std::abs(value));
 }
 #else
 X87_TRAMPOLINE_ARGS(void, x87_fabs, (X87State * a1), x9);
@@ -198,11 +196,11 @@ void x87_fadd_ST(X87State *a1, unsigned int st_offset_1,
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
   // Get register indices and values
-  const auto val1 = a1->get_st(st_offset_1);
-  const auto val2 = a1->get_st(st_offset_2);
+  const auto val1 = a1->get_st_fast(st_offset_1);
+  const auto val2 = a1->get_st_fast(st_offset_2);
 
   // Perform addition and store result in ST(idx1)
-  a1->set_st(st_offset_1, val1 + val2);
+  a1->set_st_fast(st_offset_1, val1 + val2);
 
   if (pop_stack) {
     a1->pop();
@@ -224,9 +222,9 @@ void x87_fadd_f32(X87State *a1, unsigned int fp32) {
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
   auto value = std::bit_cast<float>(fp32);
-  auto st0 = a1->get_st(0);
+  auto st0 = a1->get_st_fast(0);
 
-  a1->set_st(0, st0 + value);
+  a1->set_st_fast(0, st0 + value);
 }
 #else
 X87_TRAMPOLINE_ARGS(void, x87_fadd_f32, (X87State * a1, unsigned int fp32), x9);
@@ -241,9 +239,9 @@ void x87_fadd_f64(X87State *a1, unsigned long long a2) {
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
   auto value = std::bit_cast<double>(a2);
-  auto st0 = a1->get_st(0);
+  auto st0 = a1->get_st_fast(0);
 
-  a1->set_st(0, st0 + value);
+  a1->set_st_fast(0, st0 + value);
 }
 #else
 X87_TRAMPOLINE_ARGS(void, x87_fadd_f64, (X87State * a1, unsigned long long a2),
@@ -375,7 +373,7 @@ void x87_fchs(X87State *a1) {
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
   // Negate value in ST(0)
-  a1->set_st(0, -a1->get_st(0));
+  a1->set_st_fast(0, -a1->get_st_fast(0));
 }
 #else
 X87_TRAMPOLINE_ARGS(void, x87_fchs, (X87State * a1), x9);
@@ -573,13 +571,13 @@ void x87_fcos(X87State *a1) {
   LOG(1, "x87_fcos\n", 10);
   a1->status_word &= ~(kConditionCode1 | kConditionCode2);
   // Get ST(0)
-  auto value = a1->get_st(0);
+  auto value = a1->get_st_fast(0);
 
   // Calculate cosine
   auto result = cos(value);
 
   // Store result back in ST(0)
-  a1->set_st(0, result);
+  a1->set_st_fast(0, result);
 }
 #else
 X87_TRAMPOLINE_ARGS(void, x87_fcos, (X87State * a1), x9);
@@ -615,11 +613,11 @@ void x87_fdiv_ST(X87State *a1, unsigned int st_offset_1,
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
   // Get register indices and values
-  const auto val1 = a1->get_st(st_offset_1);
-  const auto val2 = a1->get_st(st_offset_2);
+  const auto val1 = a1->get_st_fast(st_offset_1);
+  const auto val2 = a1->get_st_fast(st_offset_2);
 
-  // Perform reversed division and store result
-  a1->set_st(st_offset_1, val1 / val2);
+  // Perform division and store result
+  a1->set_st_fast(st_offset_1, val1 / val2);
 
   if (pop_stack) {
     a1->pop();
@@ -640,9 +638,9 @@ void x87_fdiv_f32(X87State *a1, unsigned int a2) {
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
   auto value = std::bit_cast<float>(a2);
-  auto st0 = a1->get_st(0);
+  auto st0 = a1->get_st_fast(0);
 
-  a1->set_st(0, st0 / value);
+  a1->set_st_fast(0, st0 / value);
 }
 #else
 X87_TRAMPOLINE_ARGS(void, x87_fdiv_f32, (X87State * a1, unsigned int a2), x9);
@@ -657,9 +655,9 @@ void x87_fdiv_f64(X87State *a1, unsigned long long a2) {
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
   auto value = std::bit_cast<double>(a2);
-  auto st0 = a1->get_st(0);
+  auto st0 = a1->get_st_fast(0);
 
-  a1->set_st(0, st0 / value);
+  a1->set_st_fast(0, st0 / value);
 }
 #else
 X87_TRAMPOLINE_ARGS(void, x87_fdiv_f64, (X87State * a1, unsigned long long a2),
@@ -676,11 +674,11 @@ void x87_fdivr_ST(X87State *a1, unsigned int st_offset_1,
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
   // Get register indices and values
-  const auto val1 = a1->get_st(st_offset_1);
-  const auto val2 = a1->get_st(st_offset_2);
+  const auto val1 = a1->get_st_fast(st_offset_1);
+  const auto val2 = a1->get_st_fast(st_offset_2);
 
   // Perform reversed division and store result
-  a1->set_st(st_offset_1, val2 / val1);
+  a1->set_st_fast(st_offset_1, val2 / val1);
 
   if (pop_stack) {
     a1->pop();
@@ -701,9 +699,9 @@ void x87_fdivr_f32(X87State *a1, unsigned int a2) {
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
   auto value = std::bit_cast<float>(a2);
-  auto st0 = a1->get_st(0);
+  auto st0 = a1->get_st_fast(0);
 
-  a1->set_st(0, value / st0);
+  a1->set_st_fast(0, value / st0);
 }
 #else
 X87_TRAMPOLINE_ARGS(void, x87_fdivr_f32, (X87State * a1, unsigned int a2), x9);
@@ -717,9 +715,9 @@ void x87_fdivr_f64(X87State *a1, unsigned long long a2) {
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
   auto value = std::bit_cast<double>(a2);
-  auto st0 = a1->get_st(0);
+  auto st0 = a1->get_st_fast(0);
 
-  a1->set_st(0, value / st0);
+  a1->set_st_fast(0, value / st0);
 }
 #else
 X87_TRAMPOLINE_ARGS(void, x87_fdivr_f64, (X87State * a1, unsigned long long a2),
@@ -1257,11 +1255,11 @@ void x87_fmul_ST(X87State *a1, unsigned int st_offset_1,
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
   // Get register indices and values
-  const auto val1 = a1->get_st(st_offset_1);
-  const auto val2 = a1->get_st(st_offset_2);
+  const auto val1 = a1->get_st_fast(st_offset_1);
+  const auto val2 = a1->get_st_fast(st_offset_2);
 
-  // Perform reversed division and store result
-  a1->set_st(st_offset_1, val1 * val2);
+  // Perform multiplication and store result
+  a1->set_st_fast(st_offset_1, val1 * val2);
 
   if (pop_stack) {
     a1->pop();
@@ -1283,9 +1281,9 @@ void x87_fmul_f32(X87State *a1, unsigned int fp32) {
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
   auto value = std::bit_cast<float>(fp32);
-  auto st0 = a1->get_st(0);
+  auto st0 = a1->get_st_fast(0);
 
-  a1->set_st(0, st0 * value);
+  a1->set_st_fast(0, st0 * value);
 }
 #else
 X87_TRAMPOLINE_ARGS(void, x87_fmul_f32, (X87State * a1, unsigned int fp32), x9);
@@ -1300,9 +1298,9 @@ void x87_fmul_f64(X87State *a1, unsigned long long a2) {
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
   auto value = std::bit_cast<double>(a2);
-  auto st0 = a1->get_st(0);
+  auto st0 = a1->get_st_fast(0);
 
-  a1->set_st(0, st0 * value);
+  a1->set_st_fast(0, st0 * value);
 }
 #else
 X87_TRAMPOLINE_ARGS(void, x87_fmul_f64, (X87State * a1, unsigned long long a2),
@@ -1476,7 +1474,7 @@ void x87_frndint(X87State *a1) {
   a1->status_word &= ~(X87StatusWordFlag::kConditionCode1);
 
   // Get current value and round it
-  double value = a1->get_st(0);
+  double value = a1->get_st_fast(0);
   double rounded;
   auto round_bits = a1->control_word & X87ControlWord::kRoundingControlMask;
 
@@ -1498,7 +1496,7 @@ void x87_frndint(X87State *a1) {
   }
 
   // Store rounded value and update tag
-  a1->set_st(0, rounded);
+  a1->set_st_fast(0, rounded);
 }
 #else
 X87_TRAMPOLINE_ARGS(void, x87_frndint, (X87State * a1), x9);
@@ -1544,12 +1542,10 @@ void x87_fsin(X87State *a1) {
                        X87StatusWordFlag::kConditionCode2);
 
   // Get current value from top register
-  const double value = a1->get_st(0);
-
-  // Convert to NEON vector and calculate sin
+  const double value = a1->get_st_fast(0);
 
   // Store result and update tag
-  a1->set_st(0, sin(value));
+  a1->set_st_fast(0, sin(value));
 }
 #else
 X87_TRAMPOLINE_ARGS(void, x87_fsin, (X87State * a1), x9);
@@ -1565,18 +1561,18 @@ void x87_fsincos(X87State *a1) {
                        X87StatusWordFlag::kConditionCode2);
 
   // Get value from ST(0)
-  const auto value = a1->get_st(0);
+  const auto value = a1->get_st_fast(0);
 
   // Calculate sine and cosine
   auto sin_value = sin(value);
   auto cos_value = cos(value);
 
   // Store sine in ST(0)
-  a1->set_st(0, sin_value);
+  a1->set_st_fast(0, sin_value);
 
   // Push cosine onto the FPU register stack
   a1->push();
-  a1->set_st(0, cos_value);
+  a1->set_st_fast(0, cos_value);
 
   // Clear C2 condition code bit
   a1->status_word &= ~X87StatusWordFlag::kConditionCode2;
@@ -1595,12 +1591,12 @@ void x87_fsqrt(X87State *a1) {
   a1->status_word &= ~(X87StatusWordFlag::kConditionCode1);
 
   // Get current value and calculate sqrt
-  const double value = a1->get_st(0);
+  const double value = a1->get_st_fast(0);
 
   a1->status_word |= X87StatusWordFlag::kPrecision;
 
   // Store result and update tag
-  a1->set_st(0, sqrt(value));
+  a1->set_st_fast(0, sqrt(value));
 }
 #else
 X87_TRAMPOLINE_ARGS(void, x87_fsqrt, (X87State * a1), x9);
@@ -1731,11 +1727,11 @@ void x87_fsub_ST(X87State *a1, unsigned int st_offset1, unsigned int st_offset2,
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
   // Get register indices and values
-  const auto val1 = a1->get_st(st_offset1);
-  const auto val2 = a1->get_st(st_offset2);
+  const auto val1 = a1->get_st_fast(st_offset1);
+  const auto val2 = a1->get_st_fast(st_offset2);
 
   // Perform subtraction and store result in ST(st_offset1)
-  a1->set_st(st_offset1, val1 - val2);
+  a1->set_st_fast(st_offset1, val1 - val2);
 
   if (pop) {
     a1->pop();
@@ -1757,9 +1753,9 @@ void x87_fsub_f32(X87State *a1, unsigned int a2) {
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
   auto value = std::bit_cast<float>(a2);
-  auto st0 = a1->get_st(0);
+  auto st0 = a1->get_st_fast(0);
 
-  a1->set_st(0, st0 - value);
+  a1->set_st_fast(0, st0 - value);
 }
 #else
 X87_TRAMPOLINE_ARGS(void, x87_fsub_f32, (X87State * a1, unsigned int a2), x9);
@@ -1774,9 +1770,9 @@ void x87_fsub_f64(X87State *a1, unsigned long long a2) {
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
   auto value = std::bit_cast<double>(a2);
-  auto st0 = a1->get_st(0);
+  auto st0 = a1->get_st_fast(0);
 
-  a1->set_st(0, st0 - value);
+  a1->set_st_fast(0, st0 - value);
 }
 #else
 X87_TRAMPOLINE_ARGS(void, x87_fsub_f64, (X87State * a1, unsigned long long a2),
@@ -1794,12 +1790,11 @@ void x87_fsubr_ST(X87State *a1, unsigned int st_offset1,
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
   // Get register indices and values
-
-  const auto val1 = a1->get_st(st_offset1);
-  const auto val2 = a1->get_st(st_offset2);
+  const auto val1 = a1->get_st_fast(st_offset1);
+  const auto val2 = a1->get_st_fast(st_offset2);
 
   // Perform reversed subtraction and store result in ST(st_offset1)
-  a1->set_st(st_offset1, val2 - val1);
+  a1->set_st_fast(st_offset1, val2 - val1);
 
   if (pop) {
     a1->pop();
@@ -1821,9 +1816,9 @@ void x87_fsubr_f32(X87State *a1, unsigned int a2) {
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
   auto value = std::bit_cast<float>(a2);
-  auto st0 = a1->get_st(0);
+  auto st0 = a1->get_st_fast(0);
 
-  a1->set_st(0, value - st0);
+  a1->set_st_fast(0, value - st0);
 }
 #else
 X87_TRAMPOLINE_ARGS(void, x87_fsubr_f32, (X87State * a1, unsigned int a2), x9);
@@ -1838,9 +1833,9 @@ void x87_fsubr_f64(X87State *a1, unsigned long long a2) {
   a1->status_word &= ~X87StatusWordFlag::kConditionCode1;
 
   auto value = std::bit_cast<double>(a2);
-  auto st0 = a1->get_st(0);
+  auto st0 = a1->get_st_fast(0);
 
-  a1->set_st(0, value - st0);
+  a1->set_st_fast(0, value - st0);
 }
 #else
 X87_TRAMPOLINE_ARGS(void, x87_fsubr_f64, (X87State * a1, unsigned long long a2),
