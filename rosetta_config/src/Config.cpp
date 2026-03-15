@@ -47,6 +47,7 @@ static const NameBit kOpcodeBits[] = {
     {"fabs",     static_cast<int>(OpcodeId::fabs)},
     {"fsqrt",    static_cast<int>(OpcodeId::fsqrt)},
     {"fistp",    static_cast<int>(OpcodeId::fistp)},
+    {"fisttp",   static_cast<int>(OpcodeId::fisttp)},
     {"fidiv",    static_cast<int>(OpcodeId::fidiv)},
     {"fimul",    static_cast<int>(OpcodeId::fimul)},
     {"fisub",    static_cast<int>(OpcodeId::fisub)},

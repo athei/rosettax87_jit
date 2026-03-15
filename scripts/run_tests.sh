@@ -41,6 +41,7 @@ ALL_TESTS=(
     test_fcom_nzcv
     test_arithp_fstp
     test_fstp_fld
+    test_fistt
 )
 
 RED='\033[0;31m'

@@ -57,6 +57,8 @@ auto translate_fsqrt(TranslationResult* a1, IRInstr* /*a2*/) -> void;
 
 auto translate_fistp(TranslationResult* a1, IRInstr* a2) -> void;
 
+auto translate_fisttp(TranslationResult* a1, IRInstr* a2) -> void;
+
 auto translate_fidiv(TranslationResult* a1, IRInstr* a2) -> void;
 
 auto translate_fimul(TranslationResult* a1, IRInstr* a2) -> void;

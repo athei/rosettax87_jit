@@ -40,6 +40,7 @@ ALL_BENCHMARKS=(
     bench_fusion_arithp_fstp
     bench_fstp_fld
     bench_round
+    bench_fistt
 )
 
 RED='\033[0;31m'

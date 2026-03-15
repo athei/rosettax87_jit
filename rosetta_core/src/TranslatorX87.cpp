@@ -2008,6 +2008,54 @@ auto translate_fistp(TranslationResult* a1, IRInstr* a2) -> void {
 }
 
 // =============================================================================
+// FISTTP — store integer with truncation and pop
+//
+// Like FISTP but always truncates toward zero (ignoring the RC field in the
+// x87 control word).  This eliminates the 15-instruction rounding-mode
+// dispatch chain — a single FCVTZS is all that's needed.
+// =============================================================================
+
+auto translate_fisttp(TranslationResult* a1, IRInstr* a2) -> void {
+    AssemblerBuffer& buf = a1->insn_buf;
+    auto [Xbase, Wd_top] = x87_begin(*a1, buf);
+    const int Xst_base = x87_get_st_base(*a1);
+
+    const IROperandSize int_size = a2->operands[0].mem.size;
+
+    const int Wd_tmp = alloc_gpr(*a1, 2);
+    const int Wd_int = alloc_free_gpr(*a1);
+    const int Dd_val = alloc_free_fpr(*a1);
+
+    // Step 1: load ST(0) mantissa → Dd_val
+    emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_val, Xst_base);
+
+    // Step 2: FISTT always truncates — single FCVTZS, no RC dispatch needed
+    const int is_64bit_int = (int_size == IROperandSize::S64) ? 1 : 0;
+    emit_fcvt_fp_to_int(buf, is_64bit_int, /*ftype=double*/ 1, /*rmode=FCVTZS*/ 3, Wd_int, Dd_val);
+
+    // Step 3: compute destination address
+    const int addr_reg =
+        compute_operand_address(*a1, /*is_64bit=*/true, &a2->operands[0], GPR::XZR);
+
+    // Step 4: store integer to memory
+    const int store_size = (int_size == IROperandSize::S16)   ? 1
+                           : (int_size == IROperandSize::S32) ? 2
+                                                              : 3;
+    emit_str_imm(buf, store_size, Wd_int, addr_reg, /*imm12=*/0);
+
+    // Step 5: free addr_reg
+    free_gpr(*a1, addr_reg);
+
+    // Step 6: pop — TOP++, updates status_word.  Wd_tmp is clean here.
+    x87_pop(buf, *a1, Xbase, Wd_top, Wd_tmp);
+
+    free_fpr(*a1, Dd_val);
+    free_gpr(*a1, Wd_int);
+    x87_end(*a1, buf, Xbase, Wd_top, Wd_tmp);
+    free_gpr(*a1, Wd_tmp);
+}
+
+// =============================================================================
 // FIDIV — divide ST(0) by integer from memory
 //
 // x87 semantics:

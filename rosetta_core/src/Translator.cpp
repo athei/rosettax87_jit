@@ -52,6 +52,7 @@ static OpcodeId opcode_to_id(uint16_t op) {
         case O::kOpcodeName_fabs:     return I::fabs;
         case O::kOpcodeName_fsqrt:    return I::fsqrt;
         case O::kOpcodeName_fistp:    return I::fistp;
+        case O::kOpcodeName_fisttp:   return I::fisttp;
         case O::kOpcodeName_fidiv:    return I::fidiv;
         case O::kOpcodeName_fimul:    return I::fimul;
         case O::kOpcodeName_fisub:    return I::fisub;
@@ -230,6 +231,10 @@ auto Translator::translate_instruction(TranslationResult* translation_result, IR
 
             case Opcode::kOpcodeName_fistp:
                 TranslatorX87::translate_fistp(translation_result, cur_instr);
+                break;
+
+            case Opcode::kOpcodeName_fisttp:
+                TranslatorX87::translate_fisttp(translation_result, cur_instr);
                 break;
 
             case Opcode::kOpcodeName_fidiv:

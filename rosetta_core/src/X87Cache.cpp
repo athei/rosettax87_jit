@@ -49,6 +49,7 @@ static bool is_handled_x87(uint16_t op) {
         case kOpcodeName_fabs:
         case kOpcodeName_fsqrt:
         case kOpcodeName_fistp:
+        case kOpcodeName_fisttp:
         case kOpcodeName_fidiv:
         case kOpcodeName_fimul:
         case kOpcodeName_fisub:
@@ -176,6 +177,7 @@ static OpcodeId opcode_to_id_local(uint16_t op) {
         case O::kOpcodeName_fabs:     return I::fabs;
         case O::kOpcodeName_fsqrt:    return I::fsqrt;
         case O::kOpcodeName_fistp:    return I::fistp;
+        case O::kOpcodeName_fisttp:   return I::fisttp;
         case O::kOpcodeName_fidiv:    return I::fidiv;
         case O::kOpcodeName_fimul:    return I::fimul;
         case O::kOpcodeName_fisub:    return I::fisub;
