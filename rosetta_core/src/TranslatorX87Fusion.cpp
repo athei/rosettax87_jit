@@ -106,7 +106,7 @@ static void emit_fld_value(AssemblerBuffer& buf, TranslationResult& a1,
                            int Xbase, int Wd_top, int Wd_tmp, int Dd_val, int Xst_base) {
     switch (cls.source) {
         case kFldReg:
-            emit_load_st(buf, Xbase, Wd_top, cls.reg_depth, Wd_tmp, Dd_val, Xst_base);
+            emit_load_st(buf, Xbase, Wd_top, resolve_depth(a1, cls.reg_depth), Wd_tmp, Dd_val, Xst_base);
             break;
 
         case kFldM32: {
@@ -255,7 +255,7 @@ static auto try_fuse_fld_arithp(TranslationResult* a1, IRInstr* fld_instr, IRIns
 
     // ── 3b: Load old ST(0) → Dd_st0  (Wd_tmp now holds ST(0) key) ──────────
 
-    const int Wk24 = emit_load_st(buf, Xbase, Wd_top, /*depth=*/0, Wd_tmp, Dd_st0, Xst_base);
+    const int Wk24 = emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_st0, Xst_base);
 
     // ── 3c: Arithmetic ──────────────────────────────────────────────────────
 
@@ -426,7 +426,7 @@ static auto try_fuse_fld_fstp(TranslationResult* a1, IRInstr* fld_instr, IRInstr
     // ── Store to destination ─────────────────────────────────────────────────
 
     if (fstp_is_reg) {
-        emit_store_st(buf, Xbase, Wd_top, /*depth=*/0, Wd_tmp, Dd_val, Xst_base);
+        emit_store_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_val, Xst_base);
     } else {
         const bool is_f32 = (fstp_instr->operands[0].mem.size == IROperandSize::S32);
         if (is_f32)
@@ -529,15 +529,15 @@ static auto try_fuse_fcom_fstsw(TranslationResult* a1, IRInstr* fcom_instr, IRIn
     const int Dd_src = alloc_free_fpr(*a1);
 
     // ── Load ST(0) ──────────────────────────────────────────────────────────
-    emit_load_st(buf, Xbase, Wd_top, /*stack_depth=*/0, Wd_tmp, Dd_st0, Xst_base);
+    emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_st0, Xst_base);
 
     // ── Load comparand ──────────────────────────────────────────────────────
     if (is_double_pop) {
         // FCOMPP/FUCOMPP: comparand is always ST(1) (no explicit operands).
-        emit_load_st(buf, Xbase, Wd_top, /*stack_depth=*/1, Wd_tmp, Dd_src, Xst_base);
+        emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 1), Wd_tmp, Dd_src, Xst_base);
     } else if (fcom_instr->operands[1].kind == IROperandKind::Register) {
         const int depth = fcom_instr->operands[1].reg.reg.index();
-        emit_load_st(buf, Xbase, Wd_top, depth, Wd_tmp, Dd_src, Xst_base);
+        emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, depth), Wd_tmp, Dd_src, Xst_base);
     } else {
         const bool is_f32 = (fcom_instr->operands[1].mem.size == IROperandSize::S32);
         const int addr_reg =
@@ -744,7 +744,7 @@ static auto try_fuse_fld_arith_fstp(TranslationResult* a1, IRInstr* fld_instr,
     } else {
         // Register-register: src = ST(1) = old ST(0).  Load it and capture the
         // byte-offset key in case FSTP stores back to ST(1).
-        Wk_st0 = emit_load_st(buf, Xbase, Wd_top, /*depth=*/0, Wd_tmp, Dd_src, Xst_base);
+        Wk_st0 = emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_src, Xst_base);
     }
 
     // ── 4c: Arithmetic ─────────────────────────────────────────────────────
@@ -782,7 +782,7 @@ static auto try_fuse_fld_arith_fstp(TranslationResult* a1, IRInstr* fld_instr,
             emit_store_st_at_offset(buf, Xbase, Wk_st0, Dd_fld, Xst_base);
         } else {
             // Memory-arith path: compute offset fresh.
-            emit_store_st(buf, Xbase, Wd_top, /*depth=*/0, Wd_tmp, Dd_fld, Xst_base);
+            emit_store_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_fld, Xst_base);
         }
     } else {
         const bool is_f32 = (fstp_instr->operands[0].mem.size == IROperandSize::S32);
@@ -893,7 +893,7 @@ static auto try_fuse_fld_arith_arithp(TranslationResult* a1, IRInstr* fld_instr,
     // ── 4b: Load old ST(0) → Dd_st0 ─────────────────────────────────────────
     // Capture key for storing back (net-zero push/pop means same physical slot).
     // Wd_tmp is now free to be reused as the depth-0 offset key.
-    const int Wk_st0 = emit_load_st(buf, Xbase, Wd_top, /*depth=*/0, Wd_tmp, Dd_st0, Xst_base);
+    const int Wk_st0 = emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_st0, Xst_base);
 
     // ── 4c: Middle arithmetic — operates on Dd_fld (new ST(0)) and Dd_st0 (ST(1))
     //        Result in Dd_fld (the intermediate).
@@ -1024,7 +1024,7 @@ static auto try_fuse_fld_fcomp_fstsw(TranslationResult* a1, IRInstr* fld_instr,
         if (is_f32)
             emit_fcvt_s_to_d(buf, Dd_cmp, Dd_cmp);
     } else {
-        emit_load_st(buf, Xbase, Wd_top, /*stack_depth=*/0, Wd_tmp, Dd_cmp, Xst_base);
+        emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_cmp, Xst_base);
     }
 
     // ── 4c: Save NZCV, FCMP, branchless CC mapping, restore NZCV ───────────
@@ -1145,7 +1145,7 @@ static auto try_fuse_fld_fcomp(TranslationResult* a1, IRInstr* fld_instr, IRInst
     emit_fld_value(buf, *a1, cls, fld_instr, Xbase, Wd_top, Wd_tmp, Dd_fld, Xst_base);
 
     // ── 3b: Load old ST(0) → Dd_st0 ────────────────────────────────────────
-    emit_load_st(buf, Xbase, Wd_top, /*stack_depth=*/0, Wd_tmp, Dd_st0, Xst_base);
+    emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_st0, Xst_base);
 
     // ── 3c: Save NZCV, FCMP, branchless CC mapping, restore NZCV ───────────
     emit_mrs_nzcv(buf, Wd_tmp2);
@@ -1259,7 +1259,7 @@ static auto try_fuse_fld_fcompp_fstsw(TranslationResult* a1, IRInstr* fld_instr,
 
     // ── 4b: Load old ST(0) → Dd_st0 ─────────────────────────────────────────
     // After FLD push: old_ST(0) is at depth=0 from current TOP (pre-push TOP).
-    emit_load_st(buf, Xbase, Wd_top, /*stack_depth=*/0, Wd_tmp, Dd_st0, Xst_base);
+    emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_st0, Xst_base);
 
     // ── 4c: Save NZCV, FCMP(fld_value vs old_ST(0)), map CC, restore NZCV ──
     emit_mrs_nzcv(buf, Wd_tmp2);
@@ -1544,8 +1544,8 @@ static auto try_fuse_arithp_fstp(TranslationResult* a1, IRInstr* arithp_instr, I
     const int Dd_dst = alloc_free_fpr(*a1);  // ST(1)
 
     // Load ST(0) and ST(1).
-    emit_load_st(buf, Xbase, Wd_top, /*stack_depth=*/0, Wd_tmp, Dd_src, Xst_base);
-    emit_load_st(buf, Xbase, Wd_top, /*stack_depth=*/1, Wd_tmp, Dd_dst, Xst_base);
+    emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_src, Xst_base);
+    emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 1), Wd_tmp, Dd_dst, Xst_base);
 
     // Compute: Dd_dst = op(Dd_dst, Dd_src)
     //   faddp:  ST(1) = ST(1) + ST(0)
@@ -1651,7 +1651,7 @@ static auto try_fuse_fstp_fld(TranslationResult* a1, IRInstr* fstp_instr, IRInst
     int Wk_st0 = -1;
     if (!fstp_is_discard) {
         Dd_st0 = alloc_free_fpr(*a1);
-        Wk_st0 = emit_load_st(buf, Xbase, Wd_top, /*depth=*/0, Wd_tmp, Dd_st0, Xst_base);
+        Wk_st0 = emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_st0, Xst_base);
     }
 
     // ── 3b/3c: Store FSTP dest and load FLD value ─────────────────────────
@@ -1667,13 +1667,13 @@ static auto try_fuse_fstp_fld(TranslationResult* a1, IRInstr* fstp_instr, IRInst
         // ── Register path: load FLD first, then store FSTP ──────────────
 
         if (cls.source == kFldReg) {
-            emit_load_st(buf, Xbase, Wd_top, cls.reg_depth + 1, Wd_tmp, Dd_fld, Xst_base);
+            emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, cls.reg_depth + 1), Wd_tmp, Dd_fld, Xst_base);
         } else {
             emit_fld_value(buf, *a1, cls, fld_instr, Xbase, Wd_top, Wd_tmp, Dd_fld, Xst_base);
         }
 
         if (!fstp_is_discard) {
-            emit_store_st(buf, Xbase, Wd_top, fstp_reg_depth, Wd_tmp, Dd_st0, Xst_base);
+            emit_store_st(buf, Xbase, Wd_top, resolve_depth(*a1, fstp_reg_depth), Wd_tmp, Dd_st0, Xst_base);
         }
     } else {
         // ── Memory path: store FSTP first, then load FLD ────────────────
@@ -1688,7 +1688,7 @@ static auto try_fuse_fstp_fld(TranslationResult* a1, IRInstr* fstp_instr, IRInst
         free_gpr(*a1, addr);
 
         if (cls.source == kFldReg) {
-            emit_load_st(buf, Xbase, Wd_top, cls.reg_depth + 1, Wd_tmp, Dd_fld, Xst_base);
+            emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, cls.reg_depth + 1), Wd_tmp, Dd_fld, Xst_base);
         } else {
             emit_fld_value(buf, *a1, cls, fld_instr, Xbase, Wd_top, Wd_tmp, Dd_fld, Xst_base);
         }
@@ -1696,7 +1696,7 @@ static auto try_fuse_fstp_fld(TranslationResult* a1, IRInstr* fstp_instr, IRInst
 
     // ── 3d: Store FLD value to ST(0) ────────────────────────────────────────
 
-    emit_store_st(buf, Xbase, Wd_top, /*depth=*/0, Wd_tmp, Dd_fld, Xst_base);
+    emit_store_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_fld, Xst_base);
 
     // ── Cleanup ─────────────────────────────────────────────────────────────
 

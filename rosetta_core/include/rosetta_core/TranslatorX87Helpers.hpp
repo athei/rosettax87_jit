@@ -250,3 +250,13 @@ auto emit_x87_tag_clear(AssemblerBuffer& buf, int Xbase, int Wd_top, int Wd_tmp,
 // =============================================================================
 
 auto emit_fcom_flags_to_sw(AssemblerBuffer& buf, int Xbase, int Wd_tmp1, int Wd_tmp2) -> void;
+
+// =============================================================================
+// OPT-G: Permutation flush — materialize a non-identity perm map via memory swaps.
+//
+// Uses cycle decomposition to emit the minimal number of swaps.
+// Dd_tmp is a temp FP register for the swap chain.
+// Wd_tmp is scratch for phys_index computation.
+// =============================================================================
+void emit_x87_perm_flush(AssemblerBuffer& buf, int Xbase, int Wd_top, int Wd_tmp,
+                          const int8_t perm[8], int Xst_base, int Dd_save, int Dd_chain);

@@ -88,6 +88,7 @@ void X87Cache::invalidate() {
     top_dirty = 0;
     tag_push_pending = 0;
     run_remaining = 0;
+    reset_perm();
 }
 
 void X87Cache::invalidate(uint32_t& free_gpr_mask, uint32_t scratch_mask) {
@@ -109,6 +110,18 @@ void X87Cache::tick() {
             tag_push_pending = 0;
         }
     }
+}
+
+void X87Cache::reset_perm() {
+    for (int i = 0; i < 8; i++)
+        perm[i] = static_cast<int8_t>(i);
+    perm_dirty = 0;
+}
+
+bool X87Cache::perm_is_identity() const {
+    for (int i = 0; i < 8; i++)
+        if (perm[i] != i) return false;
+    return true;
 }
 
 uint32_t X87Cache::pinned_mask() const {

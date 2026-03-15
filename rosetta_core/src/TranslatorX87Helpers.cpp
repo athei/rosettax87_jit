@@ -627,3 +627,51 @@ void emit_fcom_flags_to_sw(AssemblerBuffer& buf, int Xbase, int Wd_tmp1, int Wd_
     // STRH Wd_tmp1, [Xbase, #0x02]  (imm12=1, byte offset=2)
     emit_ldr_str_imm(buf, /*size=*/1, /*is_fp=*/0, /*opc=*/0, kX87StatusWordImm12, Xbase, Wd_tmp1);
 }
+
+// =============================================================================
+// OPT-G: Permutation flush — materialize a non-identity perm map via memory
+// swaps using cycle decomposition.
+//
+// For each cycle of length > 1 in the permutation, we rotate the values using
+// 2 temp FPRs: Dd_save holds the first value in the cycle, Dd_chain is used
+// for intermediate loads.
+//
+// In practice, the permutation is almost always a single 2-cycle (swap of two
+// elements from one FXCH ST(1)), requiring exactly 2 loads + 2 stores.
+//
+// Dd_save and Dd_chain are temp FPRs provided by the caller (already allocated).
+// Wd_tmp is scratch for phys_index computation (clobbered by emit_load/store_st).
+// =============================================================================
+void emit_x87_perm_flush(AssemblerBuffer& buf, int Xbase, int Wd_top, int Wd_tmp,
+                          const int8_t perm[8], int Xst_base, int Dd_save, int Dd_chain) {
+    bool visited[8] = {};
+
+    for (int i = 0; i < 8; i++) {
+        if (visited[i] || perm[i] == i)
+            continue;
+
+        // Cycle rotation using 2 temp FPRs:
+        //   Dd_save ← ST(cycle[0])              // save first element
+        //   ST(cycle[0]) ← ST(cycle[1])          // load into Dd_chain, store
+        //   ST(cycle[1]) ← ST(cycle[2])          // ...
+        //   ST(cycle[n-1]) ← Dd_save             // close with saved value
+
+        // Save ST(i)
+        emit_load_st(buf, Xbase, Wd_top, i, Wd_tmp, Dd_save, Xst_base);
+        visited[i] = true;
+
+        int j = i;
+        int next = perm[j];
+        while (next != i) {
+            // ST(j) ← ST(next)
+            emit_load_st(buf, Xbase, Wd_top, next, Wd_tmp, Dd_chain, Xst_base);
+            emit_store_st(buf, Xbase, Wd_top, j, Wd_tmp, Dd_chain, Xst_base);
+            visited[next] = true;
+            j = next;
+            next = perm[j];
+        }
+
+        // Close the cycle: ST(j) ← Dd_save
+        emit_store_st(buf, Xbase, Wd_top, j, Wd_tmp, Dd_save, Xst_base);
+    }
+}

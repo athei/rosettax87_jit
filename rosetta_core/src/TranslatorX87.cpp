@@ -46,7 +46,7 @@ auto translate_fldz(TranslationResult* a1, IRInstr* /*a2*/) -> void {
 
     // OPT-5: MOVI Dd, #0 — zero the D register with no GPR dependency.
     emit_movi_d_zero(buf, Dd_val);
-    emit_store_st(buf, Xbase, Wd_top, /*stack_depth=*/0, Wd_tmp, Dd_val, Xst_base);
+    emit_store_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_val, Xst_base);
 
     free_fpr(*a1, Dd_val);
     free_gpr(*a1, Wd_tmp2);
@@ -84,7 +84,7 @@ auto translate_fld1(TranslationResult* a1, IRInstr* /*a2*/) -> void {
 
     // OPT-5: FMOV Dd, #1.0 — single instruction, no GPR intermediate.
     emit_fmov_d_one(buf, Dd_val);
-    emit_store_st(buf, Xbase, Wd_top, /*stack_depth=*/0, Wd_tmp, Dd_val, Xst_base);
+    emit_store_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_val, Xst_base);
 
     free_fpr(*a1, Dd_val);
     free_gpr(*a1, Wd_tmp2);
@@ -129,7 +129,7 @@ static void translate_fld_const(TranslationResult* a1, uint64_t bits) {
         emit_movn(buf, 1, /*MOVK=*/3, /*hw=*/0, hw0, Wd_tmp);
 
     emit_fmov_x_to_d(buf, Dd_val, Wd_tmp);
-    emit_store_st(buf, Xbase, Wd_top, /*stack_depth=*/0, Wd_tmp, Dd_val, Xst_base);
+    emit_store_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_val, Xst_base);
 
     free_fpr(*a1, Dd_val);
     x87_end(*a1, buf, Xbase, Wd_top, Wd_tmp);
@@ -239,10 +239,10 @@ auto translate_fld(TranslationResult* a1, IRInstr* a2) -> void {
     if (a2->operands[0].kind == IROperandKind::Register) {
         // FLD ST(i) — D9 C0+i
         const int depth_src = a2->operands[1].reg.reg.index();
-        emit_load_st(buf, Xbase, Wd_top, depth_src, Wd_tmp, Dd_val, Xst_base);
+        emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, depth_src), Wd_tmp, Dd_val, Xst_base);
         x87_push(buf, *a1, Xbase, Wd_top, Wd_tmp, Wd_tmp2);
         free_gpr(*a1, Wd_tmp2);
-        emit_store_st(buf, Xbase, Wd_top, /*stack_depth=*/0, Wd_tmp, Dd_val, Xst_base);
+        emit_store_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_val, Xst_base);
     } else if (a2->operands[0].mem.size == IROperandSize::S32) {
         // FLD m32fp — D9 /0
         //
@@ -265,7 +265,7 @@ auto translate_fld(TranslationResult* a1, IRInstr* a2) -> void {
 
         // FCVT Dd, Sd — widen single → double
         emit_fcvt_s_to_d(buf, Dd_val, Dd_val);
-        emit_store_st(buf, Xbase, Wd_top, /*stack_depth=*/0, Wd_tmp, Dd_val, Xst_base);
+        emit_store_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_val, Xst_base);
     } else {
         // FLD m64fp — DD /0
         //
@@ -281,7 +281,7 @@ auto translate_fld(TranslationResult* a1, IRInstr* a2) -> void {
         emit_fldr_imm(buf, /*size=*/3 /*D=f64*/, Dd_val, addr_reg, /*imm12=*/0);
         free_gpr(*a1, addr_reg);
 
-        emit_store_st(buf, Xbase, Wd_top, /*stack_depth=*/0, Wd_tmp, Dd_val, Xst_base);
+        emit_store_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_val, Xst_base);
     }
 
     free_fpr(*a1, Dd_val);
@@ -402,7 +402,7 @@ auto translate_fild(TranslationResult* a1, IRInstr* a2) -> void {
     // Step 6: store the converted value into the freshly pushed ST(0).
     // Wd_tmp is now clean (emit_x87_push is done with it) and used here
     // as the byte-offset scratch inside emit_store_st.
-    emit_store_st(buf, Xbase, Wd_top, /*stack_depth=*/0, Wd_tmp, Dd_val, Xst_base);
+    emit_store_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_val, Xst_base);
 
     // Step 7: free in reverse allocation order
     free_fpr(*a1, Dd_val);
@@ -447,8 +447,8 @@ auto translate_fadd(TranslationResult* a1, IRInstr* a2) -> void {
 
         // Opt 3: load src first (its offset is discarded), then dst last so
         // Wd_tmp holds offset(depth_dst) and emit_store_st_at_offset can reuse it.
-        emit_load_st(buf, Xbase, Wd_top, depth_src, Wd_tmp, Dd_src, Xst_base);
-        const int Wk = emit_load_st(buf, Xbase, Wd_top, depth_dst, Wd_tmp, Dd_dst, Xst_base);
+        emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, depth_src), Wd_tmp, Dd_src, Xst_base);
+        const int Wk = emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, depth_dst), Wd_tmp, Dd_dst, Xst_base);
         emit_fadd_f64(buf, Dd_dst, Dd_dst, Dd_src);
         emit_store_st_at_offset(buf, Xbase, Wk, Dd_dst, Xst_base);
     } else {
@@ -465,7 +465,7 @@ auto translate_fadd(TranslationResult* a1, IRInstr* a2) -> void {
 
         // Step 1: load ST(0) — Wd_tmp receives the byte offset for ST(0).
         const int Wk2 =
-            emit_load_st(buf, Xbase, Wd_top, /*stack_depth=*/0, Wd_tmp, Dd_dst, Xst_base);
+            emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_dst, Xst_base);
 
         // Step 2: compute memory address from operands[0]
         const int addr_reg =
@@ -534,8 +534,8 @@ auto translate_faddp(TranslationResult* a1, IRInstr* a2) -> void {
 
     // Opt 3: load ST(0) (src) first — its offset is discarded.
     // Load ST(depth_dst) (dst) second so Wd_tmp holds offset(depth_dst).
-    emit_load_st(buf, Xbase, Wd_top, /*stack_depth=*/0, Wd_tmp, Dd_src, Xst_base);
-    const int Wk3 = emit_load_st(buf, Xbase, Wd_top, depth_dst, Wd_tmp, Dd_dst, Xst_base);
+    emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_src, Xst_base);
+    const int Wk3 = emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, depth_dst), Wd_tmp, Dd_dst, Xst_base);
     emit_fadd_f64(buf, Dd_dst, Dd_dst, Dd_src);
     emit_store_st_at_offset(buf, Xbase, Wk3, Dd_dst, Xst_base);
 
@@ -610,8 +610,8 @@ auto translate_fsub(TranslationResult* a1, IRInstr* a2) -> void {
 
         // Opt 3: load src first (offset discarded), then dst last so Wd_tmp
         // holds offset(depth_dst) for emit_store_st_at_offset.
-        emit_load_st(buf, Xbase, Wd_top, depth_src, Wd_tmp, Dd_src, Xst_base);
-        const int Wk4 = emit_load_st(buf, Xbase, Wd_top, depth_dst, Wd_tmp, Dd_dst, Xst_base);
+        emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, depth_src), Wd_tmp, Dd_src, Xst_base);
+        const int Wk4 = emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, depth_dst), Wd_tmp, Dd_dst, Xst_base);
 
         if (is_fsubr)
             emit_fsub_f64(buf, Dd_dst, Dd_src, Dd_dst);  // dst = src - dst
@@ -631,7 +631,7 @@ auto translate_fsub(TranslationResult* a1, IRInstr* a2) -> void {
         const bool is_f32 = (a2->operands[0].mem.size == IROperandSize::S32);
 
         const int Wk5 =
-            emit_load_st(buf, Xbase, Wd_top, /*stack_depth=*/0, Wd_tmp, Dd_dst, Xst_base);
+            emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_dst, Xst_base);
 
         const int addr_reg =
             compute_operand_address(*a1, /*is_64bit=*/true, &a2->operands[0], GPR::XZR);
@@ -698,8 +698,8 @@ auto translate_fsubp(TranslationResult* a1, IRInstr* a2) -> void {
 
     // Opt 3: load ST(0) (src) first — its offset is discarded.
     // Load ST(depth_dst) (dst) second so Wd_tmp holds offset(depth_dst).
-    emit_load_st(buf, Xbase, Wd_top, /*stack_depth=*/0, Wd_tmp, Dd_src, Xst_base);
-    const int Wk6 = emit_load_st(buf, Xbase, Wd_top, depth_dst, Wd_tmp, Dd_dst, Xst_base);
+    emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_src, Xst_base);
+    const int Wk6 = emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, depth_dst), Wd_tmp, Dd_dst, Xst_base);
 
     if (is_fsubrp)
         emit_fsub_f64(buf, Dd_dst, Dd_src, Dd_dst);  // ST(i) = ST(0) - ST(i)
@@ -779,8 +779,8 @@ auto translate_fdiv(TranslationResult* a1, IRInstr* a2) -> void {
 
         // Opt 3: load src first (offset discarded), then dst last so Wd_tmp
         // holds offset(depth_dst) for emit_store_st_at_offset.
-        emit_load_st(buf, Xbase, Wd_top, depth_src, Wd_tmp, Dd_src, Xst_base);
-        const int Wk7 = emit_load_st(buf, Xbase, Wd_top, depth_dst, Wd_tmp, Dd_dst, Xst_base);
+        emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, depth_src), Wd_tmp, Dd_src, Xst_base);
+        const int Wk7 = emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, depth_dst), Wd_tmp, Dd_dst, Xst_base);
 
         if (is_fdivr)
             emit_fdiv_f64(buf, Dd_dst, Dd_src, Dd_dst);  // dst = src / dst
@@ -800,7 +800,7 @@ auto translate_fdiv(TranslationResult* a1, IRInstr* a2) -> void {
         const bool is_f32 = (a2->operands[0].mem.size == IROperandSize::S32);
 
         const int Wk8 =
-            emit_load_st(buf, Xbase, Wd_top, /*stack_depth=*/0, Wd_tmp, Dd_dst, Xst_base);
+            emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_dst, Xst_base);
 
         const int addr_reg =
             compute_operand_address(*a1, /*is_64bit=*/true, &a2->operands[0], GPR::XZR);
@@ -867,8 +867,8 @@ auto translate_fdivp(TranslationResult* a1, IRInstr* a2) -> void {
 
     // Opt 3: load ST(0) (src) first — its offset is discarded.
     // Load ST(depth_dst) (dst) second so Wd_tmp holds offset(depth_dst).
-    emit_load_st(buf, Xbase, Wd_top, /*stack_depth=*/0, Wd_tmp, Dd_src, Xst_base);
-    const int Wk9 = emit_load_st(buf, Xbase, Wd_top, depth_dst, Wd_tmp, Dd_dst, Xst_base);
+    emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_src, Xst_base);
+    const int Wk9 = emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, depth_dst), Wd_tmp, Dd_dst, Xst_base);
 
     if (is_fdivrp)
         emit_fdiv_f64(buf, Dd_dst, Dd_src, Dd_dst);  // ST(i) = ST(0) / ST(i)
@@ -937,7 +937,7 @@ auto translate_fiadd(TranslationResult* a1, IRInstr* a2) -> void {
     const int Dd_int = alloc_free_fpr(*a1);
 
     // Step 1: load ST(0).  Wd_tmp receives the byte offset for ST(0).
-    const int Wk10 = emit_load_st(buf, Xbase, Wd_top, /*stack_depth=*/0, Wd_tmp, Dd_st0, Xst_base);
+    const int Wk10 = emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_st0, Xst_base);
 
     // Step 2: compute source memory address — allocates a separate free-pool GPR.
     const int addr_reg =
@@ -1044,8 +1044,8 @@ auto translate_fmul(TranslationResult* a1, IRInstr* a2) -> void {
 
         // Opt 3: load ST(0) (src) first — its offset is discarded.
         // Load ST(depth_dst) (dst) second so Wd_tmp holds offset(depth_dst).
-        emit_load_st(buf, Xbase, Wd_top, /*stack_depth=*/0, Wd_tmp, Dd_src, Xst_base);
-        const int Wk11 = emit_load_st(buf, Xbase, Wd_top, depth_dst, Wd_tmp, Dd_dst, Xst_base);
+        emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_src, Xst_base);
+        const int Wk11 = emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, depth_dst), Wd_tmp, Dd_dst, Xst_base);
         emit_fmul_f64(buf, Dd_dst, Dd_dst, Dd_src);
         emit_store_st_at_offset(buf, Xbase, Wk11, Dd_dst, Xst_base);
 
@@ -1066,8 +1066,8 @@ auto translate_fmul(TranslationResult* a1, IRInstr* a2) -> void {
 
         // Opt 3: load src first (offset discarded), then dst last so Wd_tmp
         // holds offset(depth_dst) for emit_store_st_at_offset.
-        emit_load_st(buf, Xbase, Wd_top, depth_src, Wd_tmp, Dd_src, Xst_base);
-        const int Wk12 = emit_load_st(buf, Xbase, Wd_top, depth_dst, Wd_tmp, Dd_dst, Xst_base);
+        emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, depth_src), Wd_tmp, Dd_src, Xst_base);
+        const int Wk12 = emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, depth_dst), Wd_tmp, Dd_dst, Xst_base);
         emit_fmul_f64(buf, Dd_dst, Dd_dst, Dd_src);
         emit_store_st_at_offset(buf, Xbase, Wk12, Dd_dst, Xst_base);
     } else {
@@ -1084,7 +1084,7 @@ auto translate_fmul(TranslationResult* a1, IRInstr* a2) -> void {
 
         // Step 1: load ST(0) — Wd_tmp receives the byte offset for ST(0).
         const int Wk13 =
-            emit_load_st(buf, Xbase, Wd_top, /*stack_depth=*/0, Wd_tmp, Dd_dst, Xst_base);
+            emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_dst, Xst_base);
 
         // Step 2: compute memory address
         const int addr_reg =
@@ -1188,7 +1188,7 @@ auto translate_fst(TranslationResult* a1, IRInstr* a2) -> void {
         const int Dd_src = alloc_free_fpr(*a1);
 
         // Load ST(0) as double
-        emit_load_st(buf, Xbase, Wd_top, /*stack_depth=*/0, Wd_tmp, Dd_src, Xst_base);
+        emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_src, Xst_base);
 
         // Compute destination address
         const int Xaddr =
@@ -1300,8 +1300,8 @@ auto translate_fst(TranslationResult* a1, IRInstr* a2) -> void {
 
         if (depth_dst != 0) {
             // Load ST(0), store into ST(depth_dst).
-            emit_load_st(buf, Xbase, Wd_top, /*stack_depth=*/0, Wd_tmp, Dd_src, Xst_base);
-            emit_store_st(buf, Xbase, Wd_top, depth_dst, Wd_tmp, Dd_src, Xst_base);
+            emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_src, Xst_base);
+            emit_store_st(buf, Xbase, Wd_top, resolve_depth(*a1, depth_dst), Wd_tmp, Dd_src, Xst_base);
         }
         // else: ST(0) → ST(0) is a no-op, skip load+store.
     } else {
@@ -1311,7 +1311,7 @@ auto translate_fst(TranslationResult* a1, IRInstr* a2) -> void {
         const bool is_f32 = (a2->operands[0].mem.size == IROperandSize::S32);
 
         // Load ST(0) as f64, then narrow to f32 if needed.
-        emit_load_st(buf, Xbase, Wd_top, /*stack_depth=*/0, Wd_tmp, Dd_src, Xst_base);
+        emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_src, Xst_base);
         if (is_f32)
             emit_fcvt_d_to_s(buf, Dd_src, Dd_src);
 
@@ -1503,19 +1503,19 @@ auto translate_fcom(TranslationResult* a1, IRInstr* a2) -> void {
     const int Dd_src = alloc_free_fpr(*a1);
 
     // Step 1: load ST(0) into Dd_st0.
-    emit_load_st(buf, Xbase, Wd_top, /*stack_depth=*/0, Wd_tmp, Dd_st0, Xst_base);
+    emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_st0, Xst_base);
 
     // Step 2: load the comparand into Dd_src.
     if (is_fcompp) {
         // FCOMPP: comparand is always ST(1).
-        emit_load_st(buf, Xbase, Wd_top, /*stack_depth=*/1, Wd_tmp, Dd_src, Xst_base);
+        emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 1), Wd_tmp, Dd_src, Xst_base);
     } else if (a2->operands[1].kind == IROperandKind::Register) {
         // FCOM / FCOMP ST(i): Rosetta encodes as [ST(0) Register, ST(i) Register].
         // operands[0] = ST(0) (implicit), operands[1] = ST(i) (comparand).
         // We check operands[1] (not [0]) because the memory path also has a
         // Register at operands[0] (ST(0)), so checking [0] alone can't distinguish.
         const int depth = a2->operands[1].reg.reg.index();
-        emit_load_st(buf, Xbase, Wd_top, depth, Wd_tmp, Dd_src, Xst_base);
+        emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, depth), Wd_tmp, Dd_src, Xst_base);
     } else {
         // FCOM / FCOMP m32fp / m64fp.
         // Rosetta encodes as [ST(0) Register, mem MemRef].
@@ -1687,6 +1687,19 @@ auto translate_fxch(TranslationResult* a1, IRInstr* a2) -> void {
         return;
     }
 
+    // OPT-G: Deferred FXCH — when the cache is active, just update the
+    // compile-time permutation map instead of emitting memory swaps.
+    // The permutation is materialized at run end (x87_end flush).
+    if (a1->x87_cache.run_remaining > 0 &&
+        !(g_rosetta_config && g_rosetta_config->disable_deferred_fxch)) {
+        std::swap(a1->x87_cache.perm[0], a1->x87_cache.perm[depth]);
+        a1->x87_cache.perm_dirty = 1;
+        const int Wd_scratch = alloc_gpr(*a1, 2);
+        x87_end(*a1, buf, Xbase, Wd_top, Wd_scratch);
+        free_gpr(*a1, Wd_scratch);
+        return;
+    }
+
     // OPT-E: Use two offset registers to avoid recomputing offset_0 for the
     // second store.  Saves 3 insns (15 → 12) by replacing emit_store_st
     // (which recomputes the offset via emit_st_offset) with a second
@@ -1739,7 +1752,7 @@ auto translate_fchs(TranslationResult* a1, IRInstr* /*a2*/) -> void {
     const int Wd_tmp = alloc_gpr(*a1, 2);
     const int Dd = alloc_free_fpr(*a1);
 
-    const int Wk16 = emit_load_st(buf, Xbase, Wd_top, /*stack_depth=*/0, Wd_tmp, Dd, Xst_base);
+    const int Wk16 = emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd, Xst_base);
     emit_fneg_f64(buf, Dd, Dd);
     // Opt 3: Wd_tmp still holds the ST(0) byte offset from emit_load_st above.
     emit_store_st_at_offset(buf, Xbase, Wk16, Dd, Xst_base);
@@ -1773,7 +1786,7 @@ auto translate_fabs(TranslationResult* a1, IRInstr* /*a2*/) -> void {
     const int Wd_tmp = alloc_gpr(*a1, 2);
     const int Dd = alloc_free_fpr(*a1);
 
-    const int Wk17 = emit_load_st(buf, Xbase, Wd_top, /*stack_depth=*/0, Wd_tmp, Dd, Xst_base);
+    const int Wk17 = emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd, Xst_base);
     emit_fabs_f64(buf, Dd, Dd);
     // Opt 3: Wd_tmp still holds the ST(0) byte offset from emit_load_st above.
     emit_store_st_at_offset(buf, Xbase, Wk17, Dd, Xst_base);
@@ -1807,7 +1820,7 @@ auto translate_fsqrt(TranslationResult* a1, IRInstr* /*a2*/) -> void {
     const int Wd_tmp = alloc_gpr(*a1, 2);
     const int Dd = alloc_free_fpr(*a1);
 
-    const int Wk18 = emit_load_st(buf, Xbase, Wd_top, /*stack_depth=*/0, Wd_tmp, Dd, Xst_base);
+    const int Wk18 = emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd, Xst_base);
     emit_fsqrt_f64(buf, Dd, Dd);
     // Opt 3: Wd_tmp still holds the ST(0) byte offset from emit_load_st above.
     emit_store_st_at_offset(buf, Xbase, Wk18, Dd, Xst_base);
@@ -1863,7 +1876,7 @@ auto translate_fistp(TranslationResult* a1, IRInstr* a2) -> void {
     const int Dd_val = alloc_free_fpr(*a1);
 
     // Step 1: load ST(0) mantissa → Dd_val
-    emit_load_st(buf, Xbase, Wd_top, /*stack_depth=*/0, Wd_tmp, Dd_val, Xst_base);
+    emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_val, Xst_base);
 
     // Step 2: convert f64 to signed integer, respecting the rounding mode in
     // control_word bits [11:10] (RC field).
@@ -2032,7 +2045,7 @@ auto translate_fidiv(TranslationResult* a1, IRInstr* a2) -> void {
     const int Dd_int = alloc_free_fpr(*a1);
 
     // Step 1: load ST(0).  Wd_tmp receives the byte offset for ST(0).
-    const int Wk19 = emit_load_st(buf, Xbase, Wd_top, /*stack_depth=*/0, Wd_tmp, Dd_st0, Xst_base);
+    const int Wk19 = emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_st0, Xst_base);
 
     // Step 2: compute source address
     const int addr_reg =
@@ -2095,7 +2108,7 @@ auto translate_fimul(TranslationResult* a1, IRInstr* a2) -> void {
     const int Dd_int = alloc_free_fpr(*a1);
 
     // Step 1: load ST(0).  Wd_tmp receives the byte offset for ST(0).
-    const int Wk20 = emit_load_st(buf, Xbase, Wd_top, /*stack_depth=*/0, Wd_tmp, Dd_st0, Xst_base);
+    const int Wk20 = emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_st0, Xst_base);
 
     // Step 2: compute source address
     const int addr_reg =
@@ -2157,7 +2170,7 @@ auto translate_fisub(TranslationResult* a1, IRInstr* a2) -> void {
     const int Dd_int = alloc_free_fpr(*a1);
 
     // Step 1: load ST(0).  Wd_tmp receives the byte offset for ST(0).
-    const int Wk21 = emit_load_st(buf, Xbase, Wd_top, /*stack_depth=*/0, Wd_tmp, Dd_st0, Xst_base);
+    const int Wk21 = emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_st0, Xst_base);
 
     // Step 2: compute source address
     const int addr_reg =
@@ -2220,7 +2233,7 @@ auto translate_fidivr(TranslationResult* a1, IRInstr* a2) -> void {
     const int Dd_int = alloc_free_fpr(*a1);
 
     // Step 1: load ST(0).  Wd_tmp receives the byte offset for ST(0).
-    const int Wk22 = emit_load_st(buf, Xbase, Wd_top, /*stack_depth=*/0, Wd_tmp, Dd_st0, Xst_base);
+    const int Wk22 = emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_st0, Xst_base);
 
     // Step 2: compute source address
     const int addr_reg =
@@ -2319,7 +2332,7 @@ auto translate_frndint(TranslationResult* a1, IRInstr* /*a2*/) -> void {
     const int Dd = alloc_free_fpr(*a1);
 
     // Load ST(0) into Dd; Wd_tmp receives the byte offset of ST(0) for opt-3.
-    const int Wk23 = emit_load_st(buf, Xbase, Wd_top, /*stack_depth=*/0, Wd_tmp, Dd, Xst_base);
+    const int Wk23 = emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd, Xst_base);
 
     if (g_rosetta_config && g_rosetta_config->fast_round) {
         // Fast path: assume RC=0 (round-to-nearest). Single FRINTN instruction.
@@ -2430,9 +2443,9 @@ auto translate_fcomi(TranslationResult* a1, IRInstr* a2) -> void {
     const int Dd_src = alloc_free_fpr(*a1);
 
     // Load ST(0) and ST(i).
-    emit_load_st(buf, Xbase, Wd_top, /*stack_depth=*/0, Wd_tmp, Dd_st0, Xst_base);
+    emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_st0, Xst_base);
     const int depth = a2->operands[1].reg.reg.index();
-    emit_load_st(buf, Xbase, Wd_top, depth, Wd_tmp, Dd_src, Xst_base);
+    emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, depth), Wd_tmp, Dd_src, Xst_base);
 
     // FCMP Dd_st0, Dd_src — clobbers NZCV with FP comparison result
     emit_fcmp_f64(buf, Dd_st0, Dd_src);
@@ -2522,7 +2535,7 @@ auto translate_ftst(TranslationResult* a1, IRInstr* /*a2*/) -> void {
     const int Dd_st0 = alloc_free_fpr(*a1);
 
     // Load ST(0).
-    emit_load_st(buf, Xbase, Wd_top, /*stack_depth=*/0, Wd_tmp, Dd_st0, Xst_base);
+    emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_st0, Xst_base);
 
     // MRS Wd_tmp2, NZCV — save current NZCV
     emit_mrs_nzcv(buf, Wd_tmp2);
@@ -2603,7 +2616,7 @@ auto translate_fist(TranslationResult* a1, IRInstr* a2) -> void {
     const int Dd_val = alloc_free_fpr(*a1);
 
     // Load ST(0)
-    emit_load_st(buf, Xbase, Wd_top, /*stack_depth=*/0, Wd_tmp, Dd_val, Xst_base);
+    emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_val, Xst_base);
 
     // Rounding mode dispatch — same CBZ/SUB chain as translate_fistp.
     const int is_64bit_int = (int_size == IROperandSize::S64) ? 1 : 0;
@@ -2684,7 +2697,7 @@ auto translate_fisubr(TranslationResult* a1, IRInstr* a2) -> void {
     const int Dd_int = alloc_free_fpr(*a1);
 
     // Step 1: load ST(0)
-    const int Wk = emit_load_st(buf, Xbase, Wd_top, /*stack_depth=*/0, Wd_tmp, Dd_st0, Xst_base);
+    const int Wk = emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_st0, Xst_base);
 
     // Step 2: compute source address
     const int addr_reg =
@@ -2785,9 +2798,9 @@ auto translate_fcmov(TranslationResult* a1, IRInstr* a2) -> void {
     x87_flush_top(buf, *a1, Xbase, Wd_top, Wd_tmp);
 
     // Load ST(i) FIRST — its key is discarded (Opt 3 pattern).
-    emit_load_st(buf, Xbase, Wd_top, depth_src, Wd_tmp, Dd_src, Xst_base);
+    emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, depth_src), Wd_tmp, Dd_src, Xst_base);
     // Load ST(0) LAST — Wd_tmp retains ST(0) key for emit_store_st_at_offset.
-    const int Wk = emit_load_st(buf, Xbase, Wd_top, /*stack_depth=*/0, Wd_tmp, Dd_st0, Xst_base);
+    const int Wk = emit_load_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_st0, Xst_base);
 
     // FCSEL: if (cond) result = Dd_src, else result = Dd_st0
     // NZCV is live from prior x86 ALU/FCOMI — this is what FCMOV tests.

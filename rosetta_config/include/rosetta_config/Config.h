@@ -87,7 +87,8 @@ enum class FusionId : int {
 struct RosettaConfig {
     uint8_t  disable_x87_cache;      // ROSETTA_X87_DISABLE_CACHE=1
     uint8_t  fast_round;             // ROSETTA_X87_FAST_ROUND=1 — skip RC dispatch, always round-to-nearest
-    uint8_t  _pad[6];
+    uint8_t  disable_deferred_fxch;  // ROSETTA_X87_DISABLE_DEFERRED_FXCH=1 — disable OPT-G
+    uint8_t  _pad[5];
     uint64_t disabled_ops_mask;      // ROSETTA_X87_DISABLE_OPS=fadd,fsub,...
     uint64_t disabled_fusions_mask;  // ROSETTA_X87_DISABLE_FUSIONS=fld_arithp,...
 };

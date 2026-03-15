@@ -11,6 +11,18 @@
 
 namespace TranslatorX87 {
 
+// ── OPT-G: Deferred FXCH — compile-time depth resolution ────────────────────
+//
+// When the permutation map is active (perm_dirty), resolve_depth remaps a
+// logical stack depth to the physical depth that should be passed to
+// emit_load_st / emit_store_st.  This happens entirely at JIT-compile time
+// (no runtime cost).
+
+inline int resolve_depth(const TranslationResult& a1, int logical_depth) {
+    if (!a1.x87_cache.perm_dirty) return logical_depth;
+    return a1.x87_cache.perm[logical_depth];
+}
+
 // ── Preamble / epilogue used by every translate_* and try_fuse_* function ────
 
 inline auto x87_begin(TranslationResult& a1, AssemblerBuffer& buf) -> std::pair<int, int> {
@@ -41,8 +53,37 @@ inline int x87_get_st_base(TranslationResult& a1) {
     return a1.x87_cache.gprs_valid ? a1.x87_cache.st_base_gpr : -1;
 }
 
+// OPT-G: Flush deferred permutation before push/pop.
+// Push/pop change TOP, which invalidates the perm map (it maps depths relative
+// to TOP). Rather than trying to adjust the map, flush it and reset to identity.
+inline void perm_flush_before_stack_change(AssemblerBuffer& buf, TranslationResult& a1,
+                                            int Xbase, int Wd_top, int Wd_tmp) {
+    if (a1.x87_cache.perm_dirty) {
+        const int Xst_base = x87_get_st_base(a1);
+        const int Dd_save = alloc_free_fpr(a1);
+        const int Dd_chain = alloc_free_fpr(a1);
+        emit_x87_perm_flush(buf, Xbase, Wd_top, Wd_tmp, a1.x87_cache.perm,
+                            Xst_base, Dd_save, Dd_chain);
+        free_fpr(a1, Dd_chain);
+        free_fpr(a1, Dd_save);
+        a1.x87_cache.reset_perm();
+    }
+}
+
 inline void x87_end(TranslationResult& a1, AssemblerBuffer& buf, int Xbase, int Wd_top,
                     int Wd_tmp, int consumed = 1) {
+    // OPT-G: flush deferred permutation at end of run.
+    if (a1.x87_cache.perm_dirty && a1.x87_cache.run_remaining <= consumed) {
+        const int Xst_base = x87_get_st_base(a1);
+        const int Dd_save = alloc_free_fpr(a1);
+        const int Dd_chain = alloc_free_fpr(a1);
+        emit_x87_perm_flush(buf, Xbase, Wd_top, Wd_tmp, a1.x87_cache.perm,
+                            Xst_base, Dd_save, Dd_chain);
+        free_fpr(a1, Dd_chain);
+        free_fpr(a1, Dd_save);
+        a1.x87_cache.reset_perm();
+    }
+
     // OPT-D: flush any deferred tag-valid update at end of run.
     // For multi-instruction fusions (consumed > 1), tick() will decrement
     // run_remaining by `consumed` after this call.  We must flush before
@@ -67,6 +108,19 @@ inline void x87_end(TranslationResult& a1, AssemblerBuffer& buf, int Xbase, int 
 }
 
 inline void x87_cache_force_release(TranslationResult& a1, AssemblerBuffer& buf) {
+    // OPT-G: flush deferred permutation before releasing.
+    if (a1.x87_cache.perm_dirty && a1.x87_cache.gprs_valid) {
+        const int Xst_base = x87_get_st_base(a1);
+        const int tmp = alloc_gpr(a1, 2);
+        const int Dd_save = alloc_free_fpr(a1);
+        const int Dd_chain = alloc_free_fpr(a1);
+        emit_x87_perm_flush(buf, a1.x87_cache.base_gpr, a1.x87_cache.top_gpr,
+                            tmp, a1.x87_cache.perm, Xst_base, Dd_save, Dd_chain);
+        free_fpr(a1, Dd_chain);
+        free_fpr(a1, Dd_save);
+        free_gpr(a1, tmp);
+        a1.x87_cache.reset_perm();
+    }
     // OPT-D: flush deferred tag-valid update before releasing.
     if (a1.x87_cache.tag_push_pending && a1.x87_cache.gprs_valid) {
         const int tmp = alloc_gpr(a1, 2);
@@ -126,6 +180,7 @@ inline void x87_push(AssemblerBuffer& buf, TranslationResult& a1, int Xbase, int
             emit_store_top(buf, Xbase, Wd_top, Wd_tmp);
             a1.x87_cache.top_dirty = 0;
         }
+        perm_flush_before_stack_change(buf, a1, Xbase, Wd_top, Wd_tmp);
         emit_x87_push_fully_deferred(buf, Wd_top);
         a1.x87_cache.top_dirty = 1;
         a1.x87_cache.tag_push_pending = 1;
@@ -137,6 +192,7 @@ inline void x87_push(AssemblerBuffer& buf, TranslationResult& a1, int Xbase, int
 inline void x87_pop(AssemblerBuffer& buf, TranslationResult& a1, int Xbase, int Wd_top,
                     int Wd_tmp) {
     if (a1.x87_cache.run_remaining > 0) {
+        perm_flush_before_stack_change(buf, a1, Xbase, Wd_top, Wd_tmp);
         if (a1.x87_cache.tag_push_pending && a1.x87_cache.top_dirty) {
             // OPT-D: Full push-pop cancellation.  Both tag updates cancel, and
             // memory already has the correct final TOP (pre-push = post-pop).
@@ -170,6 +226,7 @@ inline void x87_pop_n(AssemblerBuffer& buf, TranslationResult& a1, int Xbase, in
     // OPT-D: flush pending tag before multi-pop (cancellation is only 1:1).
     x87_flush_tags(buf, a1, Xbase, Wd_top, Wd_tmp, Wd_tmp2);
     if (a1.x87_cache.run_remaining > 0) {
+        perm_flush_before_stack_change(buf, a1, Xbase, Wd_top, Wd_tmp);
         emit_x87_pop_n_deferred(buf, Xbase, Wd_top, Wd_tmp, Wd_tmp2, n);
         a1.x87_cache.top_dirty = 1;
     } else {

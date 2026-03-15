@@ -20,6 +20,14 @@ struct X87Cache {
     int8_t top_dirty = 0;       // OPT-C: 1 = push skipped store_top, TOP in memory stale
     int8_t gprs_valid = 0;           // 1 = base/top/st_base GPR numbers are meaningful
     int8_t tag_push_pending = 0;     // OPT-D: 1 = push's tag-valid update deferred (cancel on next pop)
+
+    // OPT-G: Deferred FXCH — compile-time register renaming.
+    // perm[i] maps logical stack depth i to physical depth offset.
+    // Identity: perm[i] == i for all i.  FXCH ST(n) swaps perm[0] and perm[n].
+    // Flushed at run end by emitting the minimal memory swaps (cycle decomposition).
+    int8_t perm[8] = {0, 1, 2, 3, 4, 5, 6, 7};
+    int8_t perm_dirty = 0;  // 1 = permutation is non-identity
+
     IRBlock* prev_block = nullptr;
 
     bool active() const;
@@ -28,6 +36,10 @@ struct X87Cache {
     void set_run(int run_length);
     void tick();
     uint32_t pinned_mask() const;
+
+    // OPT-G: permutation helpers
+    void reset_perm();
+    bool perm_is_identity() const;
 
     // Scan forward from insn_idx counting consecutive handled x87 instructions.
     // disabled_ops_mask: bitmask of OpcodeId bits for disabled opcodes — stops
