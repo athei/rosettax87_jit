@@ -482,6 +482,21 @@ auto emit_fmov_d_one(AssemblerBuffer& buf, int Dd) -> void {
     buf.emit(0x1E6E1000u | (uint32_t)(Dd & 0x1F));
 }
 
+auto emit_ldr_literal_f64(AssemblerBuffer& buf, int Dd, uint64_t constant) -> void {
+    // OPT-H: LDR Dd, [PC, #8] — load from 2 instructions ahead (the .quad)
+    // Encoding (LDR literal, SIMD&FP):
+    //   opc=01 (64-bit) | 011 | V=1 | 00 | imm19=2 | Rt
+    //   0b01_011_1_00_0000000000000000010_00000 = 0x5C000040
+    buf.emit(0x5C000040u | (uint32_t)(Dd & 0x1F));
+
+    // B #3 — skip over the 8 bytes of constant data, land on next real insn
+    emit_b(buf, 3);
+
+    // .quad constant — 8 bytes of raw data in 2 instruction slots
+    buf.emit((uint32_t)(constant & 0xFFFFFFFFu));
+    buf.emit((uint32_t)(constant >> 32));
+}
+
 auto emit_scvtf(AssemblerBuffer& buf, int is_64bit_int, int ftype, int Rd, int Rn) -> void {
     // SCVTF (scalar, integer): converts GPR to FP
     // [31]=sf [30:24]=0011110 [23:22]=ftype [21]=1 [20:19]=00 [18:16]=010

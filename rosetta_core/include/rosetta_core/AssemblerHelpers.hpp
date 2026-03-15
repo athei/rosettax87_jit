@@ -166,6 +166,12 @@ auto emit_fmov_d_to_x(AssemblerBuffer& buf, int Xd, int Dn) -> void;
 auto emit_movi_d_zero(AssemblerBuffer& buf, int Dd) -> void;
 auto emit_fmov_d_one(AssemblerBuffer& buf, int Dd) -> void;
 
+// OPT-H: Inline constant pool — LDR Dd, [PC, #8] + B +3 + .quad
+// Loads a 64-bit constant into Dd using PC-relative literal load.
+// Emits 2 instructions + 8 bytes data (= 4 instruction slots total).
+// No GPR intermediate needed.
+auto emit_ldr_literal_f64(AssemblerBuffer& buf, int Dd, uint64_t constant) -> void;
+
 // CSET Wd, cond — set Wd to 1 if condition holds, else 0
 // Encodes as CSINC Rd, XZR, XZR, invert(cond)
 // AArch64 cond codes: EQ=0 NE=1 CS=2 CC=3 MI=4 PL=5 VS=6 VC=7

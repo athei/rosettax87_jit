@@ -154,21 +154,10 @@ static void emit_fld_value(AssemblerBuffer& buf, TranslationResult& a1,
             emit_fmov_d_one(buf, Dd_val);
             break;
 
-        case kFldConst64: {
-            const uint16_t h3 = (uint16_t)(cls.const_bits >> 48);
-            const uint16_t h2 = (uint16_t)(cls.const_bits >> 32);
-            const uint16_t h1 = (uint16_t)(cls.const_bits >> 16);
-            const uint16_t h0 = (uint16_t)(cls.const_bits);
-            emit_movn(buf, 1, 2, 3, h3, Wd_tmp);
-            if (h2)
-                emit_movn(buf, 1, 3, 2, h2, Wd_tmp);
-            if (h1)
-                emit_movn(buf, 1, 3, 1, h1, Wd_tmp);
-            if (h0)
-                emit_movn(buf, 1, 3, 0, h0, Wd_tmp);
-            emit_fmov_x_to_d(buf, Dd_val, Wd_tmp);
+        case kFldConst64:
+            // OPT-H: Inline constant pool — 2 insns + 8 bytes data
+            emit_ldr_literal_f64(buf, Dd_val, cls.const_bits);
             break;
-        }
 
         case kFldInvalid:
             break;

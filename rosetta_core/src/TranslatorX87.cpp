@@ -113,22 +113,9 @@ static void translate_fld_const(TranslationResult* a1, uint64_t bits) {
     x87_push(buf, *a1, Xbase, Wd_top, Wd_tmp, Wd_tmp2);
     free_gpr(*a1, Wd_tmp2);
 
-    // Load the 64-bit constant into Wd_tmp via MOVZ hw=3 + up to three MOVKs.
-    // Chunks are emitted high-to-low; zero chunks after the first are skipped.
-    const uint16_t hw3 = (uint16_t)(bits >> 48);
-    const uint16_t hw2 = (uint16_t)(bits >> 32);
-    const uint16_t hw1 = (uint16_t)(bits >> 16);
-    const uint16_t hw0 = (uint16_t)(bits);
-
-    emit_movn(buf, /*is_64bit=*/1, /*opc=*/2 /*MOVZ*/, /*hw=*/3, hw3, Wd_tmp);
-    if (hw2)
-        emit_movn(buf, 1, /*MOVK=*/3, /*hw=*/2, hw2, Wd_tmp);
-    if (hw1)
-        emit_movn(buf, 1, /*MOVK=*/3, /*hw=*/1, hw1, Wd_tmp);
-    if (hw0)
-        emit_movn(buf, 1, /*MOVK=*/3, /*hw=*/0, hw0, Wd_tmp);
-
-    emit_fmov_x_to_d(buf, Dd_val, Wd_tmp);
+    // OPT-H: Inline constant pool — LDR Dd, [PC, #8] + B + .quad
+    // Replaces MOVZ/MOVK chain + FMOV (4-5 insns) with 2 insns + 8 bytes data.
+    emit_ldr_literal_f64(buf, Dd_val, bits);
     emit_store_st(buf, Xbase, Wd_top, resolve_depth(*a1, 0), Wd_tmp, Dd_val, Xst_base);
 
     free_fpr(*a1, Dd_val);
