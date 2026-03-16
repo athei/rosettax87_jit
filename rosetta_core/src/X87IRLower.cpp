@@ -415,6 +415,11 @@ void lower(Context& ctx, TranslationResult* result) {
     for (int d = 0; d < 8; d++) {
         int16_t val = ctx.slot_val[d];
         if (val < 0) continue;  // initial slot, unchanged (no store needed)
+        // Skip redundant write-back: if the value is a ReadSt loaded from the
+        // same physical slot it would be stored to, the store is a no-op.
+        if (ctx.nodes[val].op == Op::ReadSt &&
+            ctx.nodes[val].initial_depth == d + ctx.top_delta)
+            continue;
         int Dd = fprs.get(val);
         if (Dd < 0) continue;   // dead or already freed
         emit_store_st(buf, Xbase, Wd_top, d, Wd_tmp, Dd, Xst_base);

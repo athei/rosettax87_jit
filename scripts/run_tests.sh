@@ -45,6 +45,7 @@ ALL_TESTS=(
     test_fistt
     test_tag_batch
     test_fld_arith_arithp_fma
+    test_readst_elide
 )
 
 RED='\033[0;31m'
