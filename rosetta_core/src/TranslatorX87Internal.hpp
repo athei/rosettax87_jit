@@ -84,6 +84,17 @@ inline void x87_end(TranslationResult& a1, AssemblerBuffer& buf, int Xbase, int 
         a1.x87_cache.reset_perm();
     }
 
+    // OPT-D2: flush deferred pop tag updates at end of run.
+    if (a1.x87_cache.deferred_pop_count > 0 && a1.x87_cache.run_remaining <= consumed) {
+        const int Wd_t2 = alloc_free_gpr(a1);
+        const int Wd_tw = alloc_free_gpr(a1);
+        emit_x87_tag_set_empty_batch(buf, Xbase, Wd_top, Wd_tmp, Wd_t2, Wd_tw,
+                                      a1.x87_cache.deferred_pop_count);
+        free_gpr(a1, Wd_tw);
+        free_gpr(a1, Wd_t2);
+        a1.x87_cache.deferred_pop_count = 0;
+    }
+
     // OPT-D: flush any deferred tag-valid update at end of run.
     // For multi-instruction fusions (consumed > 1), tick() will decrement
     // run_remaining by `consumed` after this call.  We must flush before
@@ -121,6 +132,18 @@ inline void x87_cache_force_release(TranslationResult& a1, AssemblerBuffer& buf)
         free_gpr(a1, tmp);
         a1.x87_cache.reset_perm();
     }
+    // OPT-D2: flush deferred pop tag updates before releasing.
+    if (a1.x87_cache.deferred_pop_count > 0 && a1.x87_cache.gprs_valid) {
+        const int tmp = alloc_gpr(a1, 2);
+        const int tmp2 = alloc_free_gpr(a1);
+        const int tagw = alloc_free_gpr(a1);
+        emit_x87_tag_set_empty_batch(buf, a1.x87_cache.base_gpr, a1.x87_cache.top_gpr,
+                                      tmp, tmp2, tagw, a1.x87_cache.deferred_pop_count);
+        free_gpr(a1, tagw);
+        free_gpr(a1, tmp2);
+        free_gpr(a1, tmp);
+        a1.x87_cache.deferred_pop_count = 0;
+    }
     // OPT-D: flush deferred tag-valid update before releasing.
     if (a1.x87_cache.tag_push_pending && a1.x87_cache.gprs_valid) {
         const int tmp = alloc_gpr(a1, 2);
@@ -144,7 +167,7 @@ inline void x87_cache_force_release(TranslationResult& a1, AssemblerBuffer& buf)
     a1.x87_cache.invalidate();
 }
 
-// ── OPT-C/D: Flush helpers ──────────────────────────────────────────────────
+// ── OPT-C/D/D2: Flush helpers ────────────────────────────────────────────────
 
 inline void x87_flush_top(AssemblerBuffer& buf, TranslationResult& a1, int Xbase, int Wd_top,
                           int Wd_tmp) {
@@ -154,10 +177,29 @@ inline void x87_flush_top(AssemblerBuffer& buf, TranslationResult& a1, int Xbase
     }
 }
 
+// OPT-D2: Flush deferred pop tag-set-empty updates.  Must be called before any
+// code that reads the tag word or before a push (the pushed slot might overlap
+// a deferred-popped slot).
+inline void x87_flush_deferred_pops(AssemblerBuffer& buf, TranslationResult& a1, int Xbase,
+                                     int Wd_top, int Wd_tmp) {
+    if (a1.x87_cache.deferred_pop_count > 0) {
+        const int Wd_tmp2 = alloc_free_gpr(a1);
+        const int Wd_tagw = alloc_free_gpr(a1);
+        emit_x87_tag_set_empty_batch(buf, Xbase, Wd_top, Wd_tmp, Wd_tmp2, Wd_tagw,
+                                      a1.x87_cache.deferred_pop_count);
+        free_gpr(a1, Wd_tagw);
+        free_gpr(a1, Wd_tmp2);
+        a1.x87_cache.deferred_pop_count = 0;
+    }
+}
+
 // OPT-D: Flush deferred tag-valid update.  Must be called before any code that
 // reads the tag word (e.g. FSTSW, FTST, FCOM conditions, FCMOV).
+// Also flushes deferred pop tags (OPT-D2) since both affect the tag word.
 inline void x87_flush_tags(AssemblerBuffer& buf, TranslationResult& a1, int Xbase, int Wd_top,
                            int Wd_tmp, int Wd_tmp2) {
+    // OPT-D2: flush deferred pops first (they write to tag word).
+    x87_flush_deferred_pops(buf, a1, Xbase, Wd_top, Wd_tmp);
     if (a1.x87_cache.tag_push_pending) {
         emit_x87_tag_clear(buf, Xbase, Wd_top, Wd_tmp, Wd_tmp2);
         a1.x87_cache.tag_push_pending = 0;
@@ -176,6 +218,9 @@ inline void x87_push(AssemblerBuffer& buf, TranslationResult& a1, int Xbase, int
             emit_x87_tag_clear(buf, Xbase, Wd_top, Wd_tmp, Wd_tmp2);
             a1.x87_cache.tag_push_pending = 0;
         }
+        // OPT-D2: flush deferred pops before push — the pushed slot might
+        // overlap a deferred-popped slot.
+        x87_flush_deferred_pops(buf, a1, Xbase, Wd_top, Wd_tmp);
         if (a1.x87_cache.top_dirty) {
             emit_store_top(buf, Xbase, Wd_top, Wd_tmp);
             a1.x87_cache.top_dirty = 0;
@@ -207,9 +252,11 @@ inline void x87_pop(AssemblerBuffer& buf, TranslationResult& a1, int Xbase, int 
             a1.x87_cache.tag_push_pending = 0;
             a1.x87_cache.top_dirty = 0;
         } else {
-            const int Wd_tmp2 = alloc_free_gpr(a1);
-            emit_x87_pop_deferred(buf, Xbase, Wd_top, Wd_tmp, Wd_tmp2);
-            free_gpr(a1, Wd_tmp2);
+            // OPT-D2: defer pop tag update — emit only TOP increment (2 instrs).
+            // The tag-set-empty update is batched and flushed at run end or at
+            // the next flush point (x87_flush_deferred_pops).
+            emit_x87_pop_top_only(buf, Wd_top);
+            a1.x87_cache.deferred_pop_count++;
             a1.x87_cache.top_dirty = 1;
         }
     } else {
@@ -222,6 +269,8 @@ inline void x87_pop(AssemblerBuffer& buf, TranslationResult& a1, int Xbase, int 
 
 inline void x87_pop_n(AssemblerBuffer& buf, TranslationResult& a1, int Xbase, int Wd_top,
                       int Wd_tmp, int n) {
+    // OPT-D2: flush deferred pops before multi-pop to avoid overlap.
+    x87_flush_deferred_pops(buf, a1, Xbase, Wd_top, Wd_tmp);
     const int Wd_tmp2 = alloc_free_gpr(a1);
     // OPT-D: flush pending tag before multi-pop (cancellation is only 1:1).
     x87_flush_tags(buf, a1, Xbase, Wd_top, Wd_tmp, Wd_tmp2);

@@ -550,6 +550,49 @@ void emit_x87_tag_clear(AssemblerBuffer& buf, int Xbase, int Wd_top, int Wd_tmp,
 }
 
 // =============================================================================
+// OPT-D2: Batched tag-set-empty for multiple deferred pops.
+//
+// Emits a single LDRH/ORR-chain/STRH to mark `count` consecutive popped
+// slots as kEmpty in the tag word.  The slots are:
+//   (Wd_top - count) & 7, (Wd_top - count + 1) & 7, ..., (Wd_top - 1) & 7
+//
+// This replaces N separate LDRH+compute+ORR+STRH sequences (6 instructions
+// each) with a single memory round-trip, eliminating N-1 store-forwarding
+// stalls on Apple M-series (~4 cycles each).
+// =============================================================================
+
+void emit_x87_tag_set_empty_batch(AssemblerBuffer& buf, int Xbase, int Wd_top,
+                                   int Wd_tmp, int Wd_tmp2, int Wd_tagw, int count) {
+    // LDRH  Wd_tagw, [Xbase, #4]  — load tag word once
+    emit_ldr_str_imm(buf, /*size=*/1, /*is_fp=*/0, /*LDR*/ 1, kX87TagWordImm12, Xbase, Wd_tagw);
+
+    for (int i = 0; i < count; i++) {
+        // Compute slot = (Wd_top - count + i) & 7 → Wd_tmp
+        const int offset_from_top = count - i;  // positive offset back from current TOP
+        // SUB Wd_tmp, Wd_top, #offset_from_top
+        emit_add_imm(buf, /*is_64=*/0, /*is_sub=*/1, /*is_set_flags=*/0,
+                     /*shift=*/0, offset_from_top, Wd_top, Wd_tmp);
+        // AND Wd_tmp, Wd_tmp, #7
+        emit_and_imm(buf, /*is_64=*/0, Wd_tmp,
+                     /*N=*/0, /*immr=*/0, /*imms=*/2, Wd_tmp);
+        // LSL Wd_tmp, Wd_tmp, #1  (bit_pos = slot * 2)
+        emit_bitfield(buf, /*is_64=*/0, /*UBFM*/ 2, /*N*/ 0,
+                      /*immr*/ 31, /*imms*/ 30, Wd_tmp, Wd_tmp);
+        // MOVZ Wd_tmp2, #3
+        emit_movn(buf, /*is_64=*/0, /*MOVZ opc*/ 2, /*hw*/ 0, 3, Wd_tmp2);
+        // LSLV Wd_tmp2, Wd_tmp2, Wd_tmp  → mask = 3 << bit_pos
+        buf.emit(0x1AC02000u | (uint32_t(Wd_tmp) << 16) | (uint32_t(Wd_tmp2) << 5) |
+                 uint32_t(Wd_tmp2));
+        // ORR Wd_tagw, Wd_tagw, Wd_tmp2
+        emit_logical_shifted_reg(buf, /*is_64=*/0, /*ORR*/ 1, /*N=*/0,
+                                 /*LSL*/ 0, Wd_tmp2, /*shift_amt*/ 0, Wd_tagw, Wd_tagw);
+    }
+
+    // STRH  Wd_tagw, [Xbase, #4]  — write tag word once
+    emit_ldr_str_imm(buf, /*size=*/1, /*is_fp=*/0, /*STR*/ 0, kX87TagWordImm12, Xbase, Wd_tagw);
+}
+
+// =============================================================================
 // 2j — FCMP result → x87 condition codes in status_word
 // =============================================================================
 

@@ -230,6 +230,17 @@ auto emit_x87_pop_top_only(AssemblerBuffer& buf, int Wd_top) -> void;
 auto emit_x87_tag_clear(AssemblerBuffer& buf, int Xbase, int Wd_top, int Wd_tmp, int Wd_tmp2)
     -> void;
 
+// OPT-D2: Batched tag-set-empty for multiple deferred pops.
+//
+// Marks `count` consecutive slots as kEmpty in the tag word with a single
+// LDRH/ORR-chain/STRH.  The slots are (Wd_top - count) & 7 through
+// (Wd_top - 1) & 7 — i.e. the `count` slots most recently popped, assuming
+// Wd_top already holds the post-pop TOP value.
+//
+// Requires 3 scratch GPRs: Wd_tmp, Wd_tmp2, Wd_tagw.  All are clobbered.
+void emit_x87_tag_set_empty_batch(AssemblerBuffer& buf, int Xbase, int Wd_top,
+                                   int Wd_tmp, int Wd_tmp2, int Wd_tagw, int count);
+
 // =============================================================================
 // 2j — FCMP result → x87 condition codes in status_word
 //

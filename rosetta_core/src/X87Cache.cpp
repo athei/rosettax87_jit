@@ -88,6 +88,7 @@ void X87Cache::invalidate() {
     gprs_valid = 0;
     top_dirty = 0;
     tag_push_pending = 0;
+    deferred_pop_count = 0;
     run_remaining = 0;
     reset_perm();
 }
@@ -109,6 +110,7 @@ void X87Cache::tick() {
             gprs_valid = 0;
             top_dirty = 0;
             tag_push_pending = 0;
+            deferred_pop_count = 0;
         }
     }
 }
