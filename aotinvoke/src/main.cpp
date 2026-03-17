@@ -33,9 +33,12 @@ int main(int argc, char** argv) {
     init_custom_translation_hook(g_rosetta_aot.translate_insn_addr, 
         g_rosetta_aot.transaction_result_size_addr);
 
+    auto version = g_rosetta_aot.version();
+    int offset_size = version >= kAotVersion ? g_runtime_routine_offsets.size() : g_runtime_routine_offsets.size() - 2;
+
     g_rosetta_aot.register_runtime_routine_offsets(g_runtime_routine_offsets.data(),
                                                    g_runtime_routine_names.data(),
-                                                   g_runtime_routine_offsets.size());
+                                                   offset_size);
 
     g_rosetta_aot.register_thread_context_offsets(&g_thread_context_offsets);
 

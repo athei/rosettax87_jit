@@ -85,8 +85,8 @@ struct RosettaAotApi {
 inline constexpr std::uint64_t kAotVersion = 0x15d0000000000ULL;
 
 extern RosettaAotApi g_rosetta_aot;
-extern std::array<std::uint32_t, 0x62> g_runtime_routine_offsets;
-extern std::array<const char*, 0x62> g_runtime_routine_names;
+extern std::array<std::uint32_t, 0x64> g_runtime_routine_offsets;
+extern std::array<const char*, 0x64> g_runtime_routine_names;
 extern ThreadContextOffsets g_thread_context_offsets;
 
 bool load_rosetta_aot();
