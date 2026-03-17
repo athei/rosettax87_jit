@@ -41,6 +41,9 @@ enum class Op : uint8_t {
     // Memory stores (side effects — emitted in program order)
     StoreF64,       // store as f64 to memory
     StoreF32,       // narrow to f32, store
+    StoreI16,       // convert f64 to signed i16, store
+    StoreI32,       // convert f64 to signed i32, store
+    StoreI64,       // convert f64 to signed i64, store
 
     // Compare (side effects — write CC to status_word)
     FCmp,           // compare two values, set C0/C2/C3
@@ -54,6 +57,7 @@ enum NodeFlags : uint8_t {
     kNone       = 0,
     kDead       = 1 << 0,      // eliminated by optimization pass
     kFcomFused  = 1 << 1,      // FCOM+FSTSW fused: CC stays in register
+    kTruncate   = 1 << 2,      // StoreI*: always truncate (FISTTP), skip RC dispatch
 };
 
 // ── IR node ─────────────────────────────────────────────────────────────────

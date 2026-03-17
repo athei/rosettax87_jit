@@ -58,6 +58,22 @@ static bool build_fp_store(Context& ctx, IROperand* op, int16_t val_node) {
     return true;
 }
 
+// Emit an integer store side-effect node (FISTP/FIST/FISTTP).
+static bool build_int_store(Context& ctx, IROperand* op, int16_t val_node, bool truncate) {
+    Op store_op;
+    switch (op->mem.size) {
+        case IROperandSize::S16: store_op = Op::StoreI16; break;
+        case IROperandSize::S32: store_op = Op::StoreI32; break;
+        case IROperandSize::S64: store_op = Op::StoreI64; break;
+        default: return false;
+    }
+    auto id = ctx.add_node(store_op, val_node);
+    if (id < 0) return false;
+    ctx.nodes[id].mem_operand = op;
+    if (truncate) ctx.nodes[id].flags |= kTruncate;
+    return true;
+}
+
 // ── Non-popping binary arithmetic ───────────────────────────────────────────
 
 // Handles FADD/FSUB/FSUBR/FMUL/FDIV/FDIVR (non-popping).
@@ -244,6 +260,20 @@ bool build(Context& ctx, IRInstr* instr_array, int64_t num_instrs, int64_t start
                     }
                 }
                 if (is_pop) ctx.pop();
+                break;
+            }
+
+            // ── Integer stores ──────────────────────────────────────────
+            case kOpcodeName_fistp:
+            case kOpcodeName_fist:
+            case kOpcodeName_fisttp: {
+                auto st0 = ctx.resolve(0);
+                if (st0 < 0) { ok = false; break; }
+                if (!build_int_store(ctx, &instr->operands[0], st0,
+                                     op == kOpcodeName_fisttp)) {
+                    ok = false; break;
+                }
+                if (op != kOpcodeName_fist) ctx.pop();
                 break;
             }
 

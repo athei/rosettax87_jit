@@ -36,6 +36,7 @@ static void pass_dse(Context& ctx) {
         // Side-effect nodes are never dead.
         switch (n.op) {
             case Op::StoreF64: case Op::StoreF32:
+            case Op::StoreI16: case Op::StoreI32: case Op::StoreI64:
             case Op::FCmp: case Op::FTst: case Op::FStsw:
                 continue;
             default: break;
@@ -57,6 +58,7 @@ static void pass_dse(Context& ctx) {
         if (n.flags & kDead) continue;
         switch (n.op) {
             case Op::StoreF64: case Op::StoreF32:
+            case Op::StoreI16: case Op::StoreI32: case Op::StoreI64:
             case Op::FCmp: case Op::FTst: case Op::FStsw:
                 continue;
             default: break;
