@@ -267,6 +267,36 @@ bool build(Context& ctx, IRInstr* instr_array, int64_t num_instrs, int64_t start
                 ok = build_arith(ctx, instr, Op::FDiv, true);
                 break;
 
+            // ── Integer arithmetic (memory-only, ST(0) op= mem) ────────
+            case kOpcodeName_fiadd:
+            case kOpcodeName_fisub:
+            case kOpcodeName_fisubr:
+            case kOpcodeName_fimul:
+            case kOpcodeName_fidiv:
+            case kOpcodeName_fidivr: {
+                auto st0 = ctx.resolve(0);
+                if (st0 < 0) { ok = false; break; }
+                auto mem_val = build_int_load(ctx, &instr->operands[0]);
+                if (mem_val < 0) { ok = false; break; }
+                Op arith_op;
+                bool reversed;
+                switch (op) {
+                    case kOpcodeName_fiadd:  arith_op = Op::FAdd; reversed = false; break;
+                    case kOpcodeName_fisub:  arith_op = Op::FSub; reversed = false; break;
+                    case kOpcodeName_fisubr: arith_op = Op::FSub; reversed = true;  break;
+                    case kOpcodeName_fimul:  arith_op = Op::FMul; reversed = false; break;
+                    case kOpcodeName_fidiv:  arith_op = Op::FDiv; reversed = false; break;
+                    case kOpcodeName_fidivr: arith_op = Op::FDiv; reversed = true;  break;
+                    default: __builtin_unreachable();
+                }
+                auto id = reversed
+                    ? ctx.add_node(arith_op, mem_val, st0)
+                    : ctx.add_node(arith_op, st0, mem_val);
+                if (id < 0) { ok = false; break; }
+                ctx.slot_val[0] = id;
+                break;
+            }
+
             // ── Popping arithmetic ──────────────────────────────────────
             case kOpcodeName_faddp:
                 ok = build_arithp(ctx, instr, Op::FAdd, false);
