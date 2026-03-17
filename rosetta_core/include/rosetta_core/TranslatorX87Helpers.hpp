@@ -241,6 +241,16 @@ auto emit_x87_tag_clear(AssemblerBuffer& buf, int Xbase, int Wd_top, int Wd_tmp,
 void emit_x87_tag_set_empty_batch(AssemblerBuffer& buf, int Xbase, int Wd_top,
                                    int Wd_tmp, int Wd_tmp2, int Wd_tagw, int count);
 
+// Marks `count` consecutive slots as kValid in the tag word with a single
+// LDRH / mask-shift-BIC / STRH sequence (constant cost regardless of count).
+// The slots are Wd_top & 7 through (Wd_top + count - 1) & 7 — i.e. the
+// `count` slots most recently pushed, assuming Wd_top already holds the
+// post-push TOP value.
+//
+// Requires 3 scratch GPRs: Wd_tmp, Wd_tmp2, Wd_tagw.  All are clobbered.
+void emit_x87_tag_set_valid_batch(AssemblerBuffer& buf, int Xbase, int Wd_top,
+                                   int Wd_tmp, int Wd_tmp2, int Wd_tagw, int count);
+
 // =============================================================================
 // 2j — FCMP result → x87 condition codes in status_word
 //

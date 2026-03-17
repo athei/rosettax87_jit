@@ -213,6 +213,86 @@ static void test_h_deep_pop_6(void) {
     check_f64("H: deep_pop_6 (7*fld1 + 6*faddp = 7.0)", r, 7.0);
 }
 
+/* ========================================================================= */
+/* Section I: 3 net pushes in one IR run                                     */
+/*                                                                           */
+/* Run 1: FLD+FLD+FLD (top_delta=-3) → emit_x87_tag_set_valid_batch(3)      */
+/* MOV break, then Run 2: FSTP+FSTP+FSTP verifies the values are intact.    */
+/* ========================================================================= */
+
+static void test_i_net_push_3(void) {
+    volatile double a = 2.0, b = 3.0, c = 5.0;
+    volatile double r0, r1, r2;
+    volatile int dummy = 0;
+    __asm__ volatile (
+        "fldl %4\n\t"        /* ST(2) = a = 2 */
+        "fldl %5\n\t"        /* ST(1) = b = 3 */
+        "fldl %6\n\t"        /* ST(0) = c = 5 */
+        "movl $0, %3\n\t"    /* break IR run */
+        "fstpl %0\n\t"       /* r0 = c = 5 */
+        "fstpl %1\n\t"       /* r1 = b = 3 */
+        "fstpl %2\n\t"       /* r2 = a = 2 */
+        : "=m"(r0), "=m"(r1), "=m"(r2), "+m"(dummy)
+        : "m"(a), "m"(b), "m"(c)
+    );
+    check_f64("I: net_push_3 r0 (c = 5.0)", r0, 5.0);
+    check_f64("I: net_push_3 r1 (b = 3.0)", r1, 3.0);
+    check_f64("I: net_push_3 r2 (a = 2.0)", r2, 2.0);
+}
+
+/* ========================================================================= */
+/* Section J: 2 net pushes with arithmetic in the same run                   */
+/*                                                                           */
+/* Run 1: FLD+FLD+FLD+FADDP (3 push, 1 pop → top_delta=-2)                  */
+/*   → emit_x87_tag_set_valid_batch(2)                                      */
+/* ========================================================================= */
+
+static void test_j_net_push_arith(void) {
+    volatile double a = 2.0, b = 3.0, c = 5.0;
+    volatile double r0, r1;
+    volatile int dummy = 0;
+    __asm__ volatile (
+        "fldl %3\n\t"        /* ST(0) = a = 2 */
+        "fldl %4\n\t"        /* ST(0) = b = 3, ST(1) = 2 */
+        "fldl %5\n\t"        /* ST(0) = c = 5, ST(1) = 3, ST(2) = 2 */
+        "faddp\n\t"          /* ST(0) = 5+3 = 8, ST(1) = 2 */
+        "movl $0, %2\n\t"    /* break */
+        "fstpl %0\n\t"       /* r0 = 8 */
+        "fstpl %1\n\t"       /* r1 = 2 */
+        : "=m"(r0), "=m"(r1), "+m"(dummy)
+        : "m"(a), "m"(b), "m"(c)
+    );
+    check_f64("J: net_push_arith r0 (5+3 = 8.0)", r0, 8.0);
+    check_f64("J: net_push_arith r1 (a = 2.0)", r1, 2.0);
+}
+
+/* ========================================================================= */
+/* Section K: 5 net pushes (wider mask, exercises wrap-around path)          */
+/*                                                                           */
+/* Run 1: 5*FLD1 (top_delta=-5) → emit_x87_tag_set_valid_batch(5)           */
+/*   mask = 0x3FF, shifted by top*2 — may wrap past bit 15.                 */
+/* ========================================================================= */
+
+static void test_k_net_push_5(void) {
+    volatile double r;
+    volatile int dummy = 0;
+    __asm__ volatile (
+        "fld1\n\t"
+        "fld1\n\t"
+        "fld1\n\t"
+        "fld1\n\t"
+        "fld1\n\t"           /* 5 pushes, 0 pops */
+        "movl $0, %1\n\t"    /* break */
+        "faddp\n\t"
+        "faddp\n\t"
+        "faddp\n\t"
+        "faddp\n\t"
+        "fstpl %0\n"
+        : "=m"(r), "+m"(dummy)
+    );
+    check_f64("K: net_push_5 (5 * fld1 = 5.0)", r, 5.0);
+}
+
 int main(void) {
     test_a_pop_chain_4();
     test_b_cancel_mixed();
@@ -222,6 +302,9 @@ int main(void) {
     test_f_fcompp();
     test_g_sub_chain();
     test_h_deep_pop_6();
+    test_i_net_push_3();
+    test_j_net_push_arith();
+    test_k_net_push_5();
 
     printf("\n%s: %d failure(s)\n", failures ? "FAILED" : "ALL PASSED", failures);
     return failures ? 1 : 0;

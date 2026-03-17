@@ -441,31 +441,10 @@ void lower(Context& ctx, TranslationResult* result) {
             free_gpr(*result, Wd_tagw);
         } else {
             // Net pushes: clear tag bits for new slots.
-            // Slots at final depths 0..|top_delta|-1 need kValid tags.
             int abs_delta = -ctx.top_delta;
             int Wd_tagw = alloc_free_gpr(*result);
-            emit_ldr_str_imm(buf, 1, 0, /*LDR*/1, kX87TagWordImm12, Xbase, Wd_tagw);
-
-            for (int j = 0; j < abs_delta; j++) {
-                // Physical index = (Wd_top + j) & 7
-                if (j == 0) {
-                    emit_mov_reg(buf, 0, Wd_tmp, Wd_top);
-                } else {
-                    emit_add_imm(buf, 0, 0, 0, 0, j, Wd_top, Wd_tmp);
-                    emit_and_imm(buf, 0, Wd_tmp, 0, 0, 2, Wd_tmp);
-                }
-                // bit_pos = phys_index * 2
-                emit_bitfield(buf, 0, /*UBFM*/2, 0, 31, 30, Wd_tmp, Wd_tmp);
-                // mask = 3 << bit_pos
-                emit_movn(buf, 0, /*MOVZ*/2, 0, 3, Wd_tmp2);
-                // LSLV Wd_tmp2, Wd_tmp2, Wd_tmp
-                buf.emit(0x1AC02000u | (uint32_t(Wd_tmp) << 16) |
-                         (uint32_t(Wd_tmp2) << 5) | uint32_t(Wd_tmp2));
-                // BIC Wd_tagw, Wd_tagw, Wd_tmp2  (AND NOT: clear the bits)
-                emit_logical_shifted_reg(buf, 0, /*AND*/0, /*N=1→BIC*/1, 0,
-                                         Wd_tmp2, 0, Wd_tagw, Wd_tagw);
-            }
-            emit_ldr_str_imm(buf, 1, 0, /*STR*/0, kX87TagWordImm12, Xbase, Wd_tagw);
+            emit_x87_tag_set_valid_batch(buf, Xbase, Wd_top, Wd_tmp, Wd_tmp2,
+                                          Wd_tagw, abs_delta);
             free_gpr(*result, Wd_tagw);
         }
         free_gpr(*result, Wd_tmp2);

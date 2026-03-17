@@ -55,6 +55,9 @@ auto emit_movn(AssemblerBuffer& buf, int is_64bit, int opc, int hw, uint16_t imm
 // MOV register — emits ADD (SP case) or ORR shifted-reg (general case)
 auto emit_mov_reg(AssemblerBuffer& buf, int is_64bit, int Rd, int Rn) -> void;
 
+// LSLV — variable left shift: Rd = Rn << (Rm & 31)
+auto emit_lslv(AssemblerBuffer& buf, int is_64bit, int Rm, int Rn, int Rd) -> void;
+
 // SUBS register — always sets flags, arg order is (Rn, Rm, Rd)
 auto emit_subs_reg(AssemblerBuffer& buf, int is_64bit, int Rn, int Rm, int Rd) -> void;
 

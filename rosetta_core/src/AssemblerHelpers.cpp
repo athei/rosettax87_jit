@@ -176,6 +176,16 @@ auto emit_mov_reg(AssemblerBuffer& buf, int is_64bit, int Rd, int Rn) -> void {
         emit_logical_shifted_reg(buf, is_64bit, 1, 0, 0, Rn, 0, GPR::XZR, Rd);
 }
 
+auto emit_lslv(AssemblerBuffer& buf, int is_64bit, int Rm, int Rn, int Rd) -> void {
+    // LSLV: sf | 0 | 0 | 11010110 | Rm | 001000 | Rn | Rd
+    uint32_t insn = 0x1AC02000;
+    insn |= (uint32_t)(is_64bit != 0) << 31;
+    insn |= (uint32_t)(Rm & 0x1F) << 16;
+    insn |= (uint32_t)(Rn & 0x1F) << 5;
+    insn |= (uint32_t)(Rd & 0x1F);
+    buf.emit(insn);
+}
+
 auto emit_subs_reg(AssemblerBuffer& buf, int is_64bit, int Rn, int Rm, int Rd) -> void {
     emit_add_sub_shifted_reg(buf, is_64bit, /*is_sub=*/1, /*set_flags=*/1,
                              /*shift_type=*/0, Rm, /*shift_amount=*/0, Rn, Rd);
