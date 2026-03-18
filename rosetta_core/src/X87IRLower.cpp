@@ -12,6 +12,7 @@
 #include "rosetta_config/Config.h"
 #include "rosetta_core/CoreConfig.h"
 #include "rosetta_core/X87Cache.h"
+#include "rosetta_core/CoreLog.h"
 
 // Internal helpers from TranslatorX87Internal.hpp that we need.
 namespace TranslatorX87 {
@@ -551,6 +552,94 @@ void lower(Context& ctx, TranslationResult* result) {
     }
 }
 
+// ── Peak FPR pressure query ──────────────────────────────────────────────────
+//
+// Simulates the liveness model used by the lowering pass and returns the
+// maximum number of scratch FPRs simultaneously in use at any point.
+//
+// Rules (mirroring the lowering pass exactly):
+//   - Value-producing nodes (ReadSt, Load*, Const*, FAdd, …) hold one FPR from
+//     the point they are emitted until their last use is emitted.
+//   - free_dead_inputs() fires at the end of each node, so the transient peak
+//     *during* a node is: (currently live) + 1 for the new output, before dead
+//     inputs are freed.  try_reuse_input() can avoid the +1 by recycling a
+//     dying input's FPR, but we conservatively ignore reuse here.
+//   - StoreF32 allocates one extra transient FPR (Ds_tmp) that is freed before
+//     the node ends.  Model as a +1 spike.
+//   - StoreI*, FCmp, FTst, FStsw produce no FPR output and need no extra FPRs.
+//   - Dead (kDead) nodes are skipped.
+int peak_live_fprs(const Context& ctx) {
+    // Step 1: compute last_use[] — same as FPRState::compute_last_uses.
+    int16_t last_use[kMaxNodes];
+    memset(last_use, -1, sizeof(last_use));
+    for (int i = 0; i < ctx.num_nodes; i++) {
+        const auto& n = ctx.nodes[i];
+        if (n.flags & kDead) continue;
+        for (int j = 0; j < 3; j++) {
+            if (n.inputs[j] >= 0) last_use[n.inputs[j]] = static_cast<int16_t>(i);
+        }
+    }
+    for (int d = 0; d < 8; d++) {
+        int16_t val = ctx.slot_val[d];
+        if (val >= 0 && val < ctx.num_nodes)
+            last_use[val] = static_cast<int16_t>(ctx.num_nodes);
+    }
+
+    // Step 2: simulate FPR allocation order, tracking live count.
+    // A node holds an FPR from instruction i (inclusive) to last_use[i]
+    // (exclusive — freed at the end of the last-use instruction).
+    // live[i] = number of nodes alive at the *start* of instruction i.
+    int live = 0;
+    int peak = 0;
+
+    // Track which nodes are currently holding an FPR (bit vector over kMaxNodes).
+    bool holding[kMaxNodes] = {};
+
+    for (int i = 0; i < ctx.num_nodes; i++) {
+        const auto& n = ctx.nodes[i];
+        if (n.flags & kDead) continue;
+
+        // Allocate FPR for nodes that produce an FPR-bearing value.
+        bool produces_fpr = false;
+        switch (n.op) {
+        case Op::ReadSt:
+        case Op::LoadF64: case Op::LoadF32:
+        case Op::LoadI16: case Op::LoadI32: case Op::LoadI64:
+        case Op::ConstZero: case Op::ConstOne: case Op::ConstF64:
+        case Op::FAdd: case Op::FSub: case Op::FMul: case Op::FDiv:
+        case Op::FMAdd: case Op::FMSub: case Op::FNMSub:
+        case Op::FNeg: case Op::FAbs: case Op::FSqrt:
+            produces_fpr = true;
+            break;
+        default:
+            break;
+        }
+
+        if (produces_fpr) {
+            live++;
+            holding[i] = true;
+            if (live > peak) peak = live;
+        }
+
+        // StoreF32 allocates a transient Ds_tmp (fcvt d→s narrowing) that is
+        // freed before the node finishes.  Model as a +1 spike on top of the
+        // current live count.
+        if (n.op == Op::StoreF32 && live + 1 > peak)
+            peak = live + 1;
+
+        // Free inputs whose last use is this node.
+        for (int j = 0; j < 3; j++) {
+            int16_t in = n.inputs[j];
+            if (in >= 0 && last_use[in] == i && holding[in]) {
+                holding[in] = false;
+                live--;
+            }
+        }
+    }
+
+    return peak;
+}
+
 // ── Entry point ─────────────────────────────────────────────────────────────
 
 int compile_run(TranslationResult* result, IRInstr* instr_array, int64_t num_instrs,
@@ -561,6 +650,15 @@ int compile_run(TranslationResult* result, IRInstr* instr_array, int64_t num_ins
         return 0;
 
     optimize(ctx);
+
+    // Gate lowering on actual FPR pressure vs. available pool.
+    uint32_t fpr_pool = result->free_fpr_mask;
+    int available = 0;
+    while (fpr_pool) { available++; fpr_pool &= fpr_pool - 1; }
+    if (peak_live_fprs(ctx) > available) {
+        return 0;
+    }
+
     lower(ctx, result);
 
     return ctx.consumed;

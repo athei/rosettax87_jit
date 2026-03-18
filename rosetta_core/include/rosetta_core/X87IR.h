@@ -168,6 +168,12 @@ bool build(Context& ctx, IRInstr* instr_array, int64_t num_instrs, int64_t start
 // Run optimization passes on the IR (DSE, FMA detection, FCOM+FSTSW fusion).
 void optimize(Context& ctx);
 
+// Compute the peak number of simultaneously live FPR-bearing nodes that the
+// lowering pass will require, accounting for transient temporaries (e.g. the
+// +1 FPR spike during StoreF32 narrowing).  Used to gate lowering against the
+// available scratch FPR pool.
+int peak_live_fprs(const Context& ctx);
+
 // Lower IR to AArch64 instructions, writing into result->insn_buf.
 void lower(Context& ctx, TranslationResult* result);
 

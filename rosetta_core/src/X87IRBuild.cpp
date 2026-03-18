@@ -157,20 +157,7 @@ bool build(Context& ctx, IRInstr* instr_array, int64_t num_instrs, int64_t start
            int run_length) {
     ctx.init();
 
-    // FPR budget: we have 8 scratch FPRs (D24-D31). Reserve 2 for temporaries
-    // used by the lowering (e.g. StoreF32 narrowing, address loads). That leaves
-    // 6 for simultaneously live IR values. If the symbolic stack holds more than
-    // 6 distinct computed values, bail — the lowering would exhaust the FPR pool.
-    static constexpr int kMaxLiveValues = 14;
-
     for (int i = 0; i < run_length && (start_idx + i) < num_instrs; i++) {
-        // Count distinct computed values in the symbolic stack.
-        int live = 0;
-        for (int d = 0; d < 8; d++) {
-            if (ctx.slot_val[d] >= 0) live++;
-        }
-        if (live > kMaxLiveValues) break;
-
         auto* instr = &instr_array[start_idx + i];
         const auto op = instr->opcode;
         bool ok = true;
