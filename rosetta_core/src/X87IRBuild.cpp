@@ -380,6 +380,14 @@ bool build(Context& ctx, IRInstr* instr_array, int64_t num_instrs, int64_t start
                 ctx.slot_val[0] = id;
                 break;
             }
+            case kOpcodeName_frndint: {
+                auto st0 = ctx.resolve(0);
+                if (st0 < 0) { ok = false; break; }
+                auto id = ctx.add_node(Op::FRndInt, st0);
+                if (id < 0) { ok = false; break; }
+                ctx.slot_val[0] = id;
+                break;
+            }
 
             // ── FXCH — compile-time swap ────────────────────────────────
             case kOpcodeName_fxch: {

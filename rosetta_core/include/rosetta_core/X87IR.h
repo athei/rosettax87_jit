@@ -36,7 +36,7 @@ enum class Op : uint8_t {
     FNMSub,
 
     // Unary
-    FNeg, FAbs, FSqrt,
+    FNeg, FAbs, FSqrt, FRndInt,
 
     // Memory stores (side effects — emitted in program order)
     StoreF64,       // store as f64 to memory

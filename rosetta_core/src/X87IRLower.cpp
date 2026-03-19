@@ -338,6 +338,42 @@ void lower(Context& ctx, TranslationResult* result) {
             emit_fsqrt_f64(buf, Dd, Dn);
             break;
         }
+        case Op::FRndInt: {
+            int Dn = fprs.get(n.inputs[0]);
+            int Dd = fprs.try_reuse_input(ctx, i);
+            if (Dd < 0) Dd = alloc_free_fpr(*result);
+            fprs.node_fpr[i] = static_cast<int8_t>(Dd);
+
+            if (g_rosetta_config && g_rosetta_config->fast_round) {
+                // Fast path: RC=0 → FRINTN
+                emit_fp_dp1(buf, /*type=*/1, /*FRINTN=*/8, Dd, Dn);
+            } else {
+                int Wd_rc = alloc_gpr(*result, 3);
+                // LDRH Wd_rc, [Xbase, #0]  — read control_word
+                emit_ldr_str_imm(buf, 1, 0, 1, 0, Xbase, Wd_rc);
+                // UBFX Wd_rc, Wd_rc, #10, #2  — extract RC
+                emit_bitfield(buf, 0, 2, 0, 10, 11, Wd_rc, Wd_rc);
+                // CBZ/SUB dispatch chain
+                emit_cbz(buf, 0, 0, Wd_rc, 7);                         // RC==0 → FRINTN
+                emit_add_imm(buf, 0, 1, 0, 0, 1, Wd_rc, Wd_rc);       // SUB 1
+                emit_cbz(buf, 0, 0, Wd_rc, 7);                         // RC==1 → FRINTM
+                emit_add_imm(buf, 0, 1, 0, 0, 1, Wd_rc, Wd_rc);       // SUB 1
+                emit_cbz(buf, 0, 0, Wd_rc, 7);                         // RC==2 → FRINTP
+                // RC=3: FRINTZ (truncate) — fall-through
+                emit_fp_dp1(buf, 1, /*FRINTZ=*/11, Dd, Dn);
+                emit_b(buf, 6);
+                // RC=0: FRINTN (nearest)
+                emit_fp_dp1(buf, 1, /*FRINTN=*/8, Dd, Dn);
+                emit_b(buf, 4);
+                // RC=1: FRINTM (floor)
+                emit_fp_dp1(buf, 1, /*FRINTM=*/10, Dd, Dn);
+                emit_b(buf, 2);
+                // RC=2: FRINTP (ceil)
+                emit_fp_dp1(buf, 1, /*FRINTP=*/9, Dd, Dn);
+                free_gpr(*result, Wd_rc);
+            }
+            break;
+        }
 
         // ── Memory stores ───────────────────────────────────────────────
         case Op::StoreF64: {
@@ -671,7 +707,7 @@ int peak_live_fprs(const Context& ctx) {
         case Op::ConstZero: case Op::ConstOne: case Op::ConstF64:
         case Op::FAdd: case Op::FSub: case Op::FMul: case Op::FDiv:
         case Op::FMAdd: case Op::FMSub: case Op::FNMSub:
-        case Op::FNeg: case Op::FAbs: case Op::FSqrt:
+        case Op::FNeg: case Op::FAbs: case Op::FSqrt: case Op::FRndInt:
             produces_fpr = true;
             break;
         default:

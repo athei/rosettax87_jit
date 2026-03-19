@@ -50,6 +50,7 @@ ALL_TESTS=(
     test_fxch_initial
     test_fldcw
     test_fcomi
+    test_frndint
 )
 
 RED='\033[0;31m'
