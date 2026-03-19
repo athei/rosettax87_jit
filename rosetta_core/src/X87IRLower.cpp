@@ -422,6 +422,45 @@ void lower(Context& ctx, TranslationResult* result) {
             break;
         }
 
+        // ── FCOMI / FCOMIP / FUCOMI / FUCOMIP ───────────────────────────
+        case Op::FComI: {
+            // Direct port of translate_fcomi: FCMP two FPRs, then pack and
+            // write x86-compatible flags into NZCV. Does NOT touch status_word.
+            int Dd_st0 = fprs.get(n.inputs[0]);
+            int Dd_src = fprs.get(n.inputs[1]);
+
+            emit_fcmp_f64(buf, Dd_st0, Dd_src);
+
+            // Extract condition bits before any MSR clobbers NZCV.
+            int Wd_z = alloc_free_gpr(*result);
+            int Wd_v = alloc_free_gpr(*result);
+            int Wd_c = alloc_free_gpr(*result);
+
+            emit_cset(buf, /*is_64bit=*/0, /*EQ=*/0, Wd_z);   // 1 if equal
+            emit_cset(buf, /*is_64bit=*/0, /*VS=*/6, Wd_v);   // 1 if unordered
+            emit_cset(buf, /*is_64bit=*/0, /*CS=*/2, Wd_c);   // 1 if carry set
+
+            // Z_new = Z | V  (equal or unordered → ZF)
+            emit_logical_shifted_reg(buf, 0, /*ORR*/1, 0, /*LSL*/0, Wd_v, 0, Wd_z, Wd_z);
+            // C_new = C & !V  (carry clear for unordered → CF)
+            emit_logical_shifted_reg(buf, 0, /*AND*/0, /*N=invert rhs*/1, /*LSL*/0, Wd_v, 0, Wd_c, Wd_c);
+
+            // Pack NZCV: bit30=ZF, bit29=CF, bit28=V(PF for FCMOV), bit26=PF
+            emit_bitfield(buf, /*is_64=*/0, /*UBFM=*/2, /*N=*/0,
+                          /*immr=*/2, /*imms=*/1, Wd_z, Wd_z);
+            emit_logical_shifted_reg(buf, 0, /*ORR*/1, 0, /*LSL*/0, Wd_c, 29, Wd_z, Wd_z);
+            emit_logical_shifted_reg(buf, 0, /*ORR*/1, 0, /*LSL*/0, Wd_v, 28, Wd_z, Wd_z);
+            emit_logical_shifted_reg(buf, 0, /*ORR*/1, 0, /*LSL*/0, Wd_v, 26, Wd_z, Wd_z);
+
+            emit_msr_nzcv(buf, Wd_z);
+
+            free_gpr(*result, Wd_c);
+            free_gpr(*result, Wd_v);
+            free_gpr(*result, Wd_z);
+            // Pop (for FCOMIP/FUCOMIP) is handled by the IR epilogue via top_delta.
+            break;
+        }
+
         // ── Control word ────────────────────────────────────────────────
         case Op::StoreCW: {
             // FLDCW: load u16 from memory, write to X87State.control_word.

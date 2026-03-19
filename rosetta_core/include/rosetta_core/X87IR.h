@@ -49,6 +49,11 @@ enum class Op : uint8_t {
     FCmp,           // compare two values, set C0/C2/C3
     FTst,           // compare value with zero, set C0/C2/C3
 
+    // FCOMI family (side effects — write result directly to NZCV, not status_word)
+    FComI,          // FCOMI/FUCOMI/FCOMIP/FUCOMIP: compare ST(0) vs ST(i), set NZCV
+                    // inputs[0]=ST(0) node, inputs[1]=ST(i) node
+                    // flags & kFcomIPopping: pop ST(0) after compare (FCOMIP/FUCOMIP)
+
     // Status word read
     FStsw,          // store status_word to AX (consumes CC from prior FCmp/FTst)
 
@@ -58,10 +63,11 @@ enum class Op : uint8_t {
 };
 
 enum NodeFlags : uint8_t {
-    kNone       = 0,
-    kDead       = 1 << 0,      // eliminated by optimization pass
-    kFcomFused  = 1 << 1,      // FCOM+FSTSW fused: CC stays in register
-    kTruncate   = 1 << 2,      // StoreI*: always truncate (FISTTP), skip RC dispatch
+    kNone         = 0,
+    kDead         = 1 << 0,    // eliminated by optimization pass
+    kFcomFused    = 1 << 1,    // FCOM+FSTSW fused: CC stays in register
+    kTruncate     = 1 << 2,    // StoreI*: always truncate (FISTTP), skip RC dispatch
+    kFcomIPopping = 1 << 3,    // FComI: pop ST(0) after compare (FCOMIP/FUCOMIP)
 };
 
 // ── IR node ─────────────────────────────────────────────────────────────────

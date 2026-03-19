@@ -37,7 +37,7 @@ static void pass_dse(Context& ctx) {
         switch (n.op) {
             case Op::StoreF64: case Op::StoreF32:
             case Op::StoreI16: case Op::StoreI32: case Op::StoreI64:
-            case Op::FCmp: case Op::FTst: case Op::FStsw:
+            case Op::FCmp: case Op::FTst: case Op::FStsw: case Op::FComI:
                 continue;
             default: break;
         }
@@ -59,7 +59,7 @@ static void pass_dse(Context& ctx) {
         switch (n.op) {
             case Op::StoreF64: case Op::StoreF32:
             case Op::StoreI16: case Op::StoreI32: case Op::StoreI64:
-            case Op::FCmp: case Op::FTst: case Op::FStsw:
+            case Op::FCmp: case Op::FTst: case Op::FStsw: case Op::FComI:
                 continue;
             default: break;
         }

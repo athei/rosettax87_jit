@@ -151,6 +151,27 @@ static bool build_fcom(Context& ctx, IRInstr* instr, int num_pops, bool is_fcomp
     return true;
 }
 
+// ── FCOMI / FCOMIP / FUCOMI / FUCOMIP ───────────────────────────────────────
+
+static bool build_fcomi(Context& ctx, IRInstr* instr, bool is_popping) {
+    int16_t st0 = ctx.resolve(0);
+    if (st0 < 0) return false;
+
+    // Comparand is always a register ST(i); Rosetta encodes as [ST(0), ST(i)].
+    int src_depth = instr->operands[1].reg.reg.index();
+    int16_t src = ctx.resolve(src_depth);
+    if (src < 0) return false;
+
+    auto id = ctx.add_node(Op::FComI, st0, src);
+    if (id < 0) return false;
+    if (is_popping) ctx.nodes[id].flags |= kFcomIPopping;
+
+    // Do NOT update ctx.last_fcmp — FComI sets NZCV directly, not status_word CC.
+
+    if (is_popping) ctx.pop();
+    return true;
+}
+
 // ── Main build loop ─────────────────────────────────────────────────────────
 
 bool build(Context& ctx, IRInstr* instr_array, int64_t num_instrs, int64_t start_idx,
@@ -388,6 +409,15 @@ bool build(Context& ctx, IRInstr* instr_array, int64_t num_instrs, int64_t start
             case kOpcodeName_fcompp:
             case kOpcodeName_fucompp:
                 ok = build_fcom(ctx, instr, 2, true);
+                break;
+
+            case kOpcodeName_fcomi:
+            case kOpcodeName_fucomi:
+                ok = build_fcomi(ctx, instr, false);
+                break;
+            case kOpcodeName_fcomip:
+            case kOpcodeName_fucomip:
+                ok = build_fcomi(ctx, instr, true);
                 break;
 
             case kOpcodeName_ftst: {

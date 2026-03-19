@@ -49,6 +49,7 @@ ALL_TESTS=(
     test_fxch
     test_fxch_initial
     test_fldcw
+    test_fcomi
 )
 
 RED='\033[0;31m'
