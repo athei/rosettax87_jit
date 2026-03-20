@@ -45,6 +45,7 @@ ALL_BENCHMARKS=(
     bench_round
     bench_fistt
     bench_tag_batch
+    bench_fistp_multi
 )
 
 RED='\033[0;31m'

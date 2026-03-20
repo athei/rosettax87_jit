@@ -101,6 +101,75 @@ struct FPRState {
     }
 };
 
+// ── RC preamble: load control_word and extract rounding-control bits ────────
+
+static void emit_rc_preamble(AssemblerBuffer& buf, int Xbase, int Wd_out) {
+    // LDRH Wd_out, [Xbase, #0]  — control_word is at offset 0x00
+    emit_ldr_str_imm(buf, /*size=*/1, /*is_fp=*/0, /*LDR*/1, /*imm12=*/0, Xbase, Wd_out);
+    // UBFX Wd_out, Wd_out, #10, #2  — extract RC field (bits 11:10)
+    emit_bitfield(buf, /*is_64=*/0, /*UBFM*/2, /*N*/0, /*immr*/10, /*imms*/11, Wd_out, Wd_out);
+}
+
+// ── Cached RC dispatch for FISTP/FIST ──────────────────────────────────────
+//
+// Uses a pre-extracted RC value in Wd_rc_cached.  Copies to Wd_rc_scratch
+// first because the CBZ/SUB chain is destructive.
+
+static void emit_rcmode_dispatch_cached(AssemblerBuffer& buf, int Wd_int, int Dd_val,
+                                         int is_64bit_int, int Wd_rc_cached,
+                                         int Wd_rc_scratch) {
+    // [0] MOV Wd_rc_scratch, Wd_rc_cached
+    emit_mov_reg(buf, /*is_64bit=*/0, Wd_rc_scratch, Wd_rc_cached);
+    // [1] CBZ Wd_rc_scratch, +7 → [8] FCVTNS
+    emit_cbz(buf, 0, 0, Wd_rc_scratch, 7);
+    // [2] SUB Wd_rc_scratch, Wd_rc_scratch, #1
+    emit_add_imm(buf, 0, 1, 0, 0, 1, Wd_rc_scratch, Wd_rc_scratch);
+    // [3] CBZ Wd_rc_scratch, +7 → [10] FCVTMS
+    emit_cbz(buf, 0, 0, Wd_rc_scratch, 7);
+    // [4] SUB
+    emit_add_imm(buf, 0, 1, 0, 0, 1, Wd_rc_scratch, Wd_rc_scratch);
+    // [5] CBZ Wd_rc_scratch, +7 → [12] FCVTPS
+    emit_cbz(buf, 0, 0, Wd_rc_scratch, 7);
+    // [6] FCVTZS (rmode=3)  RC=3 truncate
+    emit_fcvt_fp_to_int(buf, is_64bit_int, 1, 3, Wd_int, Dd_val);
+    // [7] B +6 → done
+    emit_b(buf, 6);
+    // [8] FCVTNS (rmode=0)  RC=0 nearest
+    emit_fcvt_fp_to_int(buf, is_64bit_int, 1, 0, Wd_int, Dd_val);
+    // [9] B +4 → done
+    emit_b(buf, 4);
+    // [10] FCVTMS (rmode=2)  RC=1 floor
+    emit_fcvt_fp_to_int(buf, is_64bit_int, 1, 2, Wd_int, Dd_val);
+    // [11] B +2 → done
+    emit_b(buf, 2);
+    // [12] FCVTPS (rmode=1)  RC=2 ceil
+    emit_fcvt_fp_to_int(buf, is_64bit_int, 1, 1, Wd_int, Dd_val);
+    // [13] done
+}
+
+// ── Cached RC dispatch for FRndInt ─────────────────────────────────────────
+
+static void emit_frint_dispatch_cached(AssemblerBuffer& buf, int Dd, int Dn,
+                                        int Wd_rc_cached, int Wd_rc_scratch) {
+    emit_mov_reg(buf, 0, Wd_rc_scratch, Wd_rc_cached);
+    emit_cbz(buf, 0, 0, Wd_rc_scratch, 7);
+    emit_add_imm(buf, 0, 1, 0, 0, 1, Wd_rc_scratch, Wd_rc_scratch);
+    emit_cbz(buf, 0, 0, Wd_rc_scratch, 7);
+    emit_add_imm(buf, 0, 1, 0, 0, 1, Wd_rc_scratch, Wd_rc_scratch);
+    emit_cbz(buf, 0, 0, Wd_rc_scratch, 7);
+    // RC=3: FRINTZ (truncate) — fall-through
+    emit_fp_dp1(buf, 1, /*FRINTZ=*/11, Dd, Dn);
+    emit_b(buf, 6);
+    // RC=0: FRINTN (nearest)
+    emit_fp_dp1(buf, 1, /*FRINTN=*/8, Dd, Dn);
+    emit_b(buf, 4);
+    // RC=1: FRINTM (floor)
+    emit_fp_dp1(buf, 1, /*FRINTM=*/10, Dd, Dn);
+    emit_b(buf, 2);
+    // RC=2: FRINTP (ceil)
+    emit_fp_dp1(buf, 1, /*FRINTP=*/9, Dd, Dn);
+}
+
 // ── Rounding-mode dispatch for FISTP/FIST ──────────────────────────────────
 //
 // Emits the same 15-instruction CBZ/SUB chain as translate_fistp (or a single
@@ -159,6 +228,26 @@ void lower(Context& ctx, TranslationResult* result) {
     // ── FPR assignment ──────────────────────────────────────────────────────
     FPRState fprs;
     fprs.compute_last_uses(ctx);
+
+    // ── RC caching: hoist LDRH+UBFX when ≥2 RC consumers in a segment ────
+    int Wd_rc_cached = -1;
+    bool rc_cache_valid = false;
+
+    if (!(g_rosetta_config && g_rosetta_config->fast_round)) {
+        int rc_count = 0;
+        bool use_rc_cache = false;
+        for (int i = 0; i < ctx.num_nodes; i++) {
+            auto& n = ctx.nodes[i];
+            if (n.flags & kDead) continue;
+            if (n.op == Op::StoreCW) { rc_count = 0; continue; }
+            bool is_rc = (n.op == Op::FRndInt) ||
+                ((n.op == Op::StoreI16 || n.op == Op::StoreI32 || n.op == Op::StoreI64)
+                 && !(n.flags & kTruncate));
+            if (is_rc && ++rc_count >= 2) { use_rc_cache = true; break; }
+        }
+        if (use_rc_cache)
+            Wd_rc_cached = alloc_gpr(*result, 3);
+    }
 
     // ── Emit each IR node ───────────────────────────────────────────────────
     for (int i = 0; i < ctx.num_nodes; i++) {
@@ -347,6 +436,13 @@ void lower(Context& ctx, TranslationResult* result) {
             if (g_rosetta_config && g_rosetta_config->fast_round) {
                 // Fast path: RC=0 → FRINTN
                 emit_fp_dp1(buf, /*type=*/1, /*FRINTN=*/8, Dd, Dn);
+            } else if (Wd_rc_cached >= 0) {
+                // RC caching: emit preamble on first use, then reuse cached RC.
+                if (!rc_cache_valid) {
+                    emit_rc_preamble(buf, Xbase, Wd_rc_cached);
+                    rc_cache_valid = true;
+                }
+                emit_frint_dispatch_cached(buf, Dd, Dn, Wd_rc_cached, Wd_tmp);
             } else {
                 int Wd_rc = alloc_gpr(*result, 3);
                 // LDRH Wd_rc, [Xbase, #0]  — read control_word
@@ -408,6 +504,14 @@ void lower(Context& ctx, TranslationResult* result) {
                 // FISTTP: always truncate, single FCVTZS.
                 emit_fcvt_fp_to_int(buf, is_64bit_int, /*ftype=double*/ 1,
                                     /*rmode=FCVTZS*/ 3, Wd_int, Dd_val);
+            } else if (Wd_rc_cached >= 0) {
+                // RC caching: emit preamble on first use, then reuse cached RC.
+                if (!rc_cache_valid) {
+                    emit_rc_preamble(buf, Xbase, Wd_rc_cached);
+                    rc_cache_valid = true;
+                }
+                emit_rcmode_dispatch_cached(buf, Wd_int, Dd_val, is_64bit_int,
+                                             Wd_rc_cached, Wd_tmp);
             } else {
                 // FISTP/FIST: respect rounding mode from control_word.
                 emit_rcmode_dispatch(buf, Wd_int, Dd_val, is_64bit_int, Xbase, Wd_tmp);
@@ -507,6 +611,8 @@ void lower(Context& ctx, TranslationResult* result) {
             // STRH Wd_cw, [Xbase, #0]  — control_word is at offset 0x00 → imm12=0
             emit_ldr_str_imm(buf, /*size=*/1, /*is_fp=*/0, /*STR*/0, /*imm12=*/0, Xbase, Wd_cw);
             free_gpr(*result, Wd_cw);
+            // Invalidate RC cache — next RC consumer must re-read control_word.
+            rc_cache_valid = false;
             break;
         }
         case Op::LoadCW: {
@@ -638,7 +744,9 @@ void lower(Context& ctx, TranslationResult* result) {
     result->x87_cache.deferred_pop_count = 0;
     result->x87_cache.reset_perm();
 
-    // 7. Free scratch GPR.
+    // 7. Free scratch GPRs.
+    if (Wd_rc_cached >= 0)
+        free_gpr(*result, Wd_rc_cached);
     free_gpr(*result, Wd_tmp);
 
     // 8. If cache is about to expire (run_remaining will hit 0 after ticks),
