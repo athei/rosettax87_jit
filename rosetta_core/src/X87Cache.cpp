@@ -72,6 +72,9 @@ static bool is_handled_x87(uint16_t op) {
         case kOpcodeName_fcmovnu:
         case kOpcodeName_ficom:
         case kOpcodeName_ficomp:
+        case kOpcodeName_fldcw:
+        case kOpcodeName_fnstcw:
+        case kOpcodeName_fnop:
             return true;
         default:
             return false;
