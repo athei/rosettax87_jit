@@ -471,6 +471,19 @@ void lower(Context& ctx, TranslationResult* result) {
             break;
         }
 
+        // ── Conditional select (FCMOV) ────────────────────────────────
+        case Op::FCSel: {
+            int Dn = fprs.get(n.inputs[0]);   // ST(0) — false arm
+            int Dm = fprs.get(n.inputs[1]);   // ST(i) — true arm
+            int Dd = fprs.try_reuse_input(ctx, i);
+            if (Dd < 0) Dd = alloc_free_fpr(*result);
+            fprs.node_fpr[i] = static_cast<int8_t>(Dd);
+            int cond = static_cast<int>(n.imm_bits & 0xF);
+            // FCSEL Dd, Dn_true, Dm_false, cond → Dd = cond ? Dn : Dm
+            emit_fcsel_f64(buf, Dd, Dm, Dn, cond);
+            break;
+        }
+
         // ── Memory stores ───────────────────────────────────────────────
         case Op::StoreF64: {
             int addr = compute_operand_address(*result, true, n.mem_operand, GPR::XZR);
@@ -816,6 +829,7 @@ int peak_live_fprs(const Context& ctx) {
         case Op::FAdd: case Op::FSub: case Op::FMul: case Op::FDiv:
         case Op::FMAdd: case Op::FMSub: case Op::FNMSub:
         case Op::FNeg: case Op::FAbs: case Op::FSqrt: case Op::FRndInt:
+        case Op::FCSel:
             produces_fpr = true;
             break;
         default:

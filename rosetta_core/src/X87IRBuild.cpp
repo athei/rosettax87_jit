@@ -167,8 +167,31 @@ static bool build_fcomi(Context& ctx, IRInstr* instr, bool is_popping) {
     if (is_popping) ctx.nodes[id].flags |= kFcomIPopping;
 
     // Do NOT update ctx.last_fcmp — FComI sets NZCV directly, not status_word CC.
+    ctx.last_fcomi = id;
 
     if (is_popping) ctx.pop();
+    return true;
+}
+
+// ── FCMOV family (conditional move to ST(0)) ────────────────────────────────
+
+static bool build_fcmov(Context& ctx, IRInstr* instr, int aarch64_cond) {
+    // Safety: FCMOV reads NZCV set by a prior FCOMI. If no FComI
+    // was built in this run, we cannot guarantee NZCV state → bail.
+    if (ctx.last_fcomi < 0) return false;
+
+    int16_t st0 = ctx.resolve(0);
+    if (st0 < 0) return false;
+
+    int src_depth = instr->operands[1].reg.reg.index();
+    int16_t src = ctx.resolve(src_depth);
+    if (src < 0) return false;
+
+    auto id = ctx.add_node(Op::FCSel, st0, src);
+    if (id < 0) return false;
+    ctx.nodes[id].imm_bits = static_cast<uint64_t>(aarch64_cond);
+
+    ctx.slot_val[0] = id;
     return true;
 }
 
@@ -426,6 +449,32 @@ bool build(Context& ctx, IRInstr* instr_array, int64_t num_instrs, int64_t start
             case kOpcodeName_fcomip:
             case kOpcodeName_fucomip:
                 ok = build_fcomi(ctx, instr, true);
+                break;
+
+            // ── FCMOV ──────────────────────────────────────────────────
+            case kOpcodeName_fcmovb:
+                ok = build_fcmov(ctx, instr, 3);   // CC
+                break;
+            case kOpcodeName_fcmovbe:
+                ok = build_fcmov(ctx, instr, 9);   // LS
+                break;
+            case kOpcodeName_fcmove:
+                ok = build_fcmov(ctx, instr, 0);   // EQ
+                break;
+            case kOpcodeName_fcmovnb:
+                ok = build_fcmov(ctx, instr, 2);   // CS
+                break;
+            case kOpcodeName_fcmovnbe:
+                ok = build_fcmov(ctx, instr, 8);   // HI
+                break;
+            case kOpcodeName_fcmovne:
+                ok = build_fcmov(ctx, instr, 1);   // NE
+                break;
+            case kOpcodeName_fcmovu:
+                ok = build_fcmov(ctx, instr, 6);   // VS
+                break;
+            case kOpcodeName_fcmovnu:
+                ok = build_fcmov(ctx, instr, 7);   // VC
                 break;
 
             case kOpcodeName_ftst: {

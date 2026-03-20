@@ -38,6 +38,10 @@ enum class Op : uint8_t {
     // Unary
     FNeg, FAbs, FSqrt, FRndInt,
 
+    // Conditional select (FCMOV): inputs[0]=ST(0) false arm, inputs[1]=ST(i) true arm
+    // imm_bits[3:0] = AArch64 condition code
+    FCSel,
+
     // Memory stores (side effects — emitted in program order)
     StoreF64,       // store as f64 to memory
     StoreF32,       // narrow to f32, store
@@ -102,6 +106,9 @@ struct Context {
     // CC tracking for FCOM+FSTSW fusion.
     int16_t last_fcmp;              // most recent FCmp/FTst node ID, or -1
 
+    // NZCV tracking for FCMOV safety gate.
+    int16_t last_fcomi;             // most recent FComI node ID, or -1
+
     // How many x87 instructions were successfully consumed.
     int16_t consumed;
 
@@ -110,6 +117,7 @@ struct Context {
         top_delta = 0;
         consumed = 0;
         last_fcmp = -1;
+        last_fcomi = -1;
         for (int i = 0; i < 8; i++) {
             slot_val[i] = static_cast<int16_t>(-(i + 1));
             initial_read[i] = -1;
