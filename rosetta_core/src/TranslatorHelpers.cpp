@@ -497,7 +497,6 @@ auto compute_operand_address(TranslationResult& result, int is_64bit, IROperand*
         op_copy.reg.seg_override = 0;
         const int inner_reg =
             compute_operand_address(result, (int)addr_size_is_64, &op_copy, dst_reg);
-
         // Allocate a scratch GPR for the segment base register
         const int seg_reg = alloc_scratch_gpr(result);
 

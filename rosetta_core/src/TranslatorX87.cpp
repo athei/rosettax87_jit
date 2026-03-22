@@ -1170,8 +1170,6 @@ auto translate_fst(TranslationResult* a1, IRInstr* a2) -> void {
         auto [Xbase, Wd_top] = x87_begin(*a1, buf);
         const int Xst_base = x87_get_st_base(*a1);
         const int Wd_tmp = alloc_gpr(*a1, 2);   // sign scratch, then pop scratch
-        const int Xbits  = alloc_gpr(*a1, 3);   // raw double bits → f80 mantissa
-        const int Wexp   = alloc_gpr(*a1, 4);   // exponent → f80 exponent word
         const int Dd_src = alloc_free_fpr(*a1);
 
         // Load ST(0) as double
@@ -1180,6 +1178,12 @@ auto translate_fst(TranslationResult* a1, IRInstr* a2) -> void {
         // Compute destination address
         const int Xaddr =
             compute_operand_address(*a1, /*is_64bit=*/true, &a2->operands[0], GPR::XZR);
+
+        // Deferred: allocate after compute_operand_address to avoid GPR exhaustion
+        // when the operand has a GS/TLS segment override (needs 3 transient GPRs).
+        // Use alloc_free_gpr — fixed pool indices could collide with Xaddr's register.
+        const int Xbits  = alloc_free_gpr(*a1);   // raw double bits → f80 mantissa
+        const int Wexp   = alloc_free_gpr(*a1);   // exponent → f80 exponent word
 
         // [0] FMOV Xbits, Dd_src — raw double bits to GPR
         emit_fmov_d_to_x(buf, Xbits, Dd_src);
