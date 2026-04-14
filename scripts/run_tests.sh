@@ -3,8 +3,14 @@
 # run_tests.sh -- run all x87 test binaries under native Rosetta and the
 # custom runtime_loader, checking self-reported PASS/FAIL output.
 #
+# Phases:
+#   1. Native Rosetta (baseline)
+#   2. runtime_loader (IR + fusions enabled, default config)
+#   3. runtime_loader with ROSETTA_X87_DISABLE_IR=1 (direct translator only)
+#   4. runtime_loader with ROSETTA_X87_DISABLE_IR=1 + ROSETTA_X87_DISABLE_ALL_FUSIONS=1
+#
 # Usage:
-#   bash scripts/run_tests.sh                # build + test (both phases)
+#   bash scripts/run_tests.sh                # build + test (all phases)
 #   bash scripts/run_tests.sh --no-build     # skip build
 #   bash scripts/run_tests.sh --native-only  # Phase 1 only (no runtime_loader)
 #   bash scripts/run_tests.sh test_arith     # only run specific test(s)
@@ -141,6 +147,40 @@ if [[ $NATIVE_ONLY -eq 0 ]]; then
             continue
         fi
         OUT=$("$LOADER" "$BINARY" 2>/dev/null | filter_runtime_lines || true)
+        check_output "$t" "$OUT"
+    done
+fi
+
+# ── Phase 3: runtime_loader, IR disabled ─────────────────────────────────────
+if [[ $NATIVE_ONLY -eq 0 ]]; then
+    echo ""
+    echo -e "${BOLD}=== Phase 3: runtime_loader (IR disabled) ===${NC}"
+
+    for t in "${TESTS[@]}"; do
+        BINARY="$BIN/$t"
+        if [[ ! -x "$BINARY" ]]; then
+            echo -e "${YELLOW}SKIP${NC}  $t  (binary not found)"
+            ERRORS=$((ERRORS + 1))
+            continue
+        fi
+        OUT=$(ROSETTA_X87_DISABLE_IR=1 "$LOADER" "$BINARY" 2>/dev/null | filter_runtime_lines || true)
+        check_output "$t" "$OUT"
+    done
+fi
+
+# ── Phase 4: runtime_loader, IR disabled + all fusions disabled ──────────────
+if [[ $NATIVE_ONLY -eq 0 ]]; then
+    echo ""
+    echo -e "${BOLD}=== Phase 4: runtime_loader (IR disabled, fusions disabled) ===${NC}"
+
+    for t in "${TESTS[@]}"; do
+        BINARY="$BIN/$t"
+        if [[ ! -x "$BINARY" ]]; then
+            echo -e "${YELLOW}SKIP${NC}  $t  (binary not found)"
+            ERRORS=$((ERRORS + 1))
+            continue
+        fi
+        OUT=$(ROSETTA_X87_DISABLE_IR=1 ROSETTA_X87_DISABLE_ALL_FUSIONS=1 "$LOADER" "$BINARY" 2>/dev/null | filter_runtime_lines || true)
         check_output "$t" "$OUT"
     done
 fi
